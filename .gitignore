@@ -1,0 +1,25 @@
+# 敏感資訊
+.env
+
+# 資料庫
+etf.db
+
+# 每日下載的 Excel 檔
+Files/
+
+# Python 暫存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# 虛擬環境
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.db
