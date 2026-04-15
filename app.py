@@ -18,6 +18,28 @@ ACTION_COLOR = {
     "減碼": "📉",
 }
 
+FLAG_MAP = {
+    "US": "🇺🇸",
+    "JP": "🇯🇵",
+    "KS": "🇰🇷",
+    "GY": "🇩🇪",
+    "HK": "🇭🇰",
+    "FP": "🇫🇷",
+    "LN": "🇬🇧",
+}
+
+def get_flag(ticker: str) -> str:
+    suffix = ticker.strip().split()[-1].upper()
+    return FLAG_MAP.get(suffix, "")
+
+def add_flag_to_name(df: pd.DataFrame) -> pd.DataFrame:
+    """在「名稱」欄前插入國旗，回傳新 DataFrame（不改原始）"""
+    df = df.copy()
+    df["名稱"] = df["代號"].apply(
+        lambda t: (get_flag(t) + " ") if get_flag(t) else ""
+    ) + df["名稱"]
+    return df
+
 # ── DB 工具 ───────────────────────────────────────
 @st.cache_resource
 def get_conn():
@@ -100,6 +122,111 @@ def get_holdings_snapshot(fund_id: str, target_date: str) -> pd.DataFrame:
         ORDER BY weight DESC
     """)
 
+# ── HTML 表格渲染 ──────────────────────────────────
+TABLE_STYLE = """
+<style>
+.etf-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    font-family: inherit;
+}
+.etf-table th {
+    text-align: left;
+    padding: 6px 12px;
+    border-bottom: 2px solid #444;
+    color: #aaa;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.etf-table td {
+    padding: 6px 12px;
+    border-bottom: 1px solid #2a2a2a;
+    white-space: nowrap;
+}
+.etf-table tr:hover td { background: #1e1e1e; }
+.pos { color: #26a641; font-weight: 600; }
+.neg { color: #f85149; font-weight: 600; }
+</style>
+"""
+
+def render_changes_html(display: pd.DataFrame, delta_raw: pd.Series, fund_id: str) -> str:
+    rows = ""
+    for i, row in display.iterrows():
+        flag = get_flag(row["代號"]) if fund_id == "00988A" else ""
+        flag_str = f"{flag} " if flag else ""
+        d = delta_raw.iloc[i]
+        cls = "pos" if d > 0 else ("neg" if d < 0 else "")
+        rows += (
+            f"<tr>"
+            f"<td>{row['代號']}</td>"
+            f"<td>{flag_str}{row['名稱']}</td>"
+            f"<td>{row['今日權重']:.2f}%</td>"
+            f"<td>{row['昨日權重']:.2f}%</td>"
+            f"<td class='{cls}'>{d:+.2f}%</td>"
+            f"<td>{int(row['股數變化']):,}</td>"
+            f"<td>{int(row['昨日股數']):,}</td>"
+            f"<td>{int(row['今日股數']):,}</td>"
+            f"</tr>"
+        )
+    return (
+        TABLE_STYLE
+        + "<table class='etf-table'>"
+        + "<thead><tr>"
+        + "<th>代號</th><th>名稱</th><th>今日權重</th><th>昨日權重</th>"
+        + "<th>權重變化</th><th>股數變化</th><th>昨日股數</th><th>今日股數</th>"
+        + "</tr></thead>"
+        + f"<tbody>{rows}</tbody></table>"
+    )
+
+def render_snapshot_html(df: pd.DataFrame, fund_id: str) -> str:
+    rows = ""
+    for _, row in df.iterrows():
+        flag = get_flag(row["代號"]) if fund_id == "00988A" else ""
+        flag_str = f"{flag} " if flag else ""
+        rows += (
+            f"<tr>"
+            f"<td>{row['代號']}</td>"
+            f"<td>{flag_str}{row['名稱']}</td>"
+            f"<td>{row['權重']:.2f}%</td>"
+            f"<td>{int(row['股數']):,}</td>"
+            f"</tr>"
+        )
+    return (
+        TABLE_STYLE
+        + "<table class='etf-table'>"
+        + "<thead><tr><th>代號</th><th>名稱</th><th>權重</th><th>股數</th></tr></thead>"
+        + f"<tbody>{rows}</tbody></table>"
+    )
+
+def render_history_html(df: pd.DataFrame, fund_id: str) -> str:
+    rows = ""
+    for _, row in df.iterrows():
+        flag = get_flag(row["代號"]) if fund_id == "00988A" else ""
+        flag_str = f"{flag} " if flag else ""
+        d = row["權重變化"]
+        cls = "pos" if d > 0 else ("neg" if d < 0 else "")
+        rows += (
+            f"<tr>"
+            f"<td>{row['日期']}</td>"
+            f"<td>{row['代號']}</td>"
+            f"<td>{flag_str}{row['名稱']}</td>"
+            f"<td>{row['動作']}</td>"
+            f"<td>{row['今日權重']:.2f}%</td>"
+            f"<td class='{cls}'>{d:+.2f}%</td>"
+            f"<td>{int(row['股數變化']):,}</td>"
+            f"</tr>"
+        )
+    return (
+        TABLE_STYLE
+        + "<table class='etf-table'>"
+        + "<thead><tr>"
+        + "<th>日期</th><th>代號</th><th>名稱</th><th>動作</th>"
+        + "<th>今日權重</th><th>權重變化</th><th>股數變化</th>"
+        + "</tr></thead>"
+        + f"<tbody>{rows}</tbody></table>"
+    )
+
 # ── 頁面設定 ──────────────────────────────────────
 st.set_page_config(
     page_title="ActiveFundRadar",
@@ -110,7 +237,7 @@ st.set_page_config(
 st.title("📡 ActiveFundRadar")
 st.caption("主動型 ETF 持倉監控系統")
 
-# ── 側欄：選基金 ──────────────────────────────────
+# ── 側欄 ──────────────────────────────────────────
 with st.sidebar:
     st.header("🔧 篩選條件")
     fund_id = st.selectbox(
@@ -142,7 +269,6 @@ with tab1:
     if df_changes.empty:
         st.info("此日期無異動資料")
     else:
-        # 統計卡片
         col1, col2, col3, col4 = st.columns(4)
         for action, col, color in [
             ("建倉", col1, "🟢"),
@@ -155,29 +281,17 @@ with tab1:
 
         st.divider()
 
-        # 各動作分區顯示
         for action in ["建倉", "清倉", "加碼", "減碼"]:
-            subset = df_changes[df_changes["動作"] == action]
+            subset = df_changes[df_changes["動作"] == action].reset_index(drop=True)
             if subset.empty:
                 continue
 
-            icon = ACTION_COLOR[action]
-            st.markdown(f"#### {icon} {action}")
-
-            display = subset.drop(columns=["動作"]).reset_index(drop=True)
-
-            # 權重變化上色
-            def color_delta(val):
-                if val > 0:
-                    return "color: #26a641"
-                elif val < 0:
-                    return "color: #f85149"
-                return ""
-
-            st.dataframe(
-                display.style.map(color_delta, subset=["權重變化"]),
-                use_container_width=True,
-                hide_index=True,
+            st.markdown(f"#### {ACTION_COLOR[action]} {action}")
+            display = subset.drop(columns=["動作"])
+            delta_raw = display["權重變化"].copy()
+            st.markdown(
+                render_changes_html(display, delta_raw, fund_id),
+                unsafe_allow_html=True,
             )
 
         # 點選個股查歷史
@@ -200,7 +314,6 @@ with tab1:
 with tab2:
     st.subheader(f"{selected_date}　{fund_id} {FUND_NAMES[fund_id]}　完整持倉")
 
-    # 找 holdings 裡最接近 selected_date 的日期
     snap_date_df = query(f"""
         SELECT DISTINCT date FROM holdings
         WHERE fund_id = '{fund_id}' AND date <= '{selected_date}'
@@ -218,14 +331,19 @@ with tab2:
 
         col_a, col_b = st.columns([2, 1])
         with col_a:
-            st.dataframe(df_snap, use_container_width=True, hide_index=True)
+            st.markdown(
+                render_snapshot_html(df_snap, fund_id),
+                unsafe_allow_html=True,
+            )
         with col_b:
             st.metric("持股總數", f"{len(df_snap)} 檔")
             st.metric("權重加總", f"{df_snap['權重'].sum():.2f}%")
             top5 = df_snap.head(5)
             st.markdown("**前五大持股**")
             for _, row in top5.iterrows():
-                st.markdown(f"- {row['代號']} {row['名稱']}　{row['權重']}%")
+                flag = get_flag(row["代號"]) if fund_id == "00988A" else ""
+                flag_str = f"{flag} " if flag else ""
+                st.markdown(f"- {row['代號']} {flag_str}{row['名稱']}　{row['權重']}%")
 
 # ════════════════════════════════════════════════
 # Tab 3：歷史紀錄
@@ -246,7 +364,6 @@ with tab3:
     df_hist = get_all_history(fund_id)
 
     if not df_hist.empty:
-        # 套用篩選
         if action_filter:
             df_hist = df_hist[df_hist["動作"].isin(action_filter)]
         if keyword:
@@ -256,9 +373,14 @@ with tab3:
             )
             df_hist = df_hist[mask]
 
+        df_hist = df_hist.reset_index(drop=True)
+
         with col_right:
             st.caption(f"共 {len(df_hist)} 筆")
 
-        st.dataframe(df_hist, use_container_width=True, hide_index=True)
+        st.markdown(
+            render_history_html(df_hist, fund_id),
+            unsafe_allow_html=True,
+        )
     else:
         st.info("尚無歷史資料")

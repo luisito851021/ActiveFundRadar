@@ -26,6 +26,19 @@ def send_telegram(message: str):
     else:
         print(f"[Telegram] 發送失敗：{resp.text}")
 
+def get_holdings_count(conn, target_date: str, fund_id: str) -> int:
+    """取得 holdings 表中 ≤ target_date 的最新日期持倉總數"""
+    result = pd.read_sql(f"""
+        SELECT COUNT(*) AS cnt FROM holdings
+        WHERE fund_id = '{fund_id}'
+          AND date = (
+              SELECT date FROM holdings
+              WHERE fund_id = '{fund_id}' AND date <= '{target_date}'
+              ORDER BY date DESC LIMIT 1
+          )
+    """, conn)
+    return int(result.iloc[0]["cnt"])
+
 def get_daily_changes(conn, target_date: str, fund_id: str) -> pd.DataFrame:
     return pd.read_sql(f"""
         SELECT
@@ -36,7 +49,6 @@ def get_daily_changes(conn, target_date: str, fund_id: str) -> pd.DataFrame:
             ROUND(delta        * 100, 2) AS delta
         FROM daily_changes
         WHERE date = '{target_date}' AND fund_id = '{fund_id}'
-        ORDER BY action, weight_today DESC   
     """, conn)
 
 def get_flag(ticker: str) -> str:
@@ -52,15 +64,31 @@ def get_flag(ticker: str) -> str:
         "LN": "🇬🇧",
     }.get(suffix, "🇹🇼")  # 純數字台股或其他預設台灣
 
-def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A") -> str:
+def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A", conn=None) -> str:
     if df.empty:
         return f"📊 <b>{target_date} {fund_id} 持倉異動</b>\n\n今日無異動"
-    lines = [f"📊 <b>{target_date} {fund_id} 持倉異動</b>\n"]
+
+    # ── 統計 ──────────────────────────────────────
+    total   = get_holdings_count(conn, target_date, fund_id) if conn else "?"
+    n_new   = len(df[df["action"] == "建倉"])
+    n_add   = len(df[df["action"] == "加碼"])
+    n_cut   = len(df[df["action"] == "減碼"])
+    n_close = len(df[df["action"] == "清倉"])
+
+    lines = [
+        f"📊 <b>{target_date} {fund_id} 持倉異動</b>",
+        f"持股{total}檔、新增{n_new}檔、加碼{n_add}檔、減碼{n_cut}檔、清倉{n_close}檔\n",
+    ]
 
     for action, symbol in [("建倉", "🟢"), ("清倉", "🔴"), ("加碼", "📈"), ("減碼", "📉")]:
-        subset = df[df["action"] == action]
+        subset = df[df["action"] == action].copy()
         if subset.empty:
             continue
+
+        # 各區塊內按股數變化絕對值降序排列
+        subset = subset.reindex(
+            subset["delta_shares"].abs().sort_values(ascending=False).index
+        )
 
         lines.append(f"{symbol} <b>{action}</b>")
         for _, row in subset.iterrows():
@@ -115,7 +143,7 @@ if __name__ == "__main__":
         if df.empty:
             print(f"[跳過] {fund_id} {target_date} 無異動資料")
             continue
-        message = format_message(df, target_date, fund_id)
+        message = format_message(df, target_date, fund_id, conn=conn)
         print(message)
         send_telegram(message)
 
