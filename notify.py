@@ -39,6 +39,19 @@ def get_daily_changes(conn, target_date: str, fund_id: str) -> pd.DataFrame:
         ORDER BY action, weight_today DESC   
     """, conn)
 
+def get_flag(ticker: str) -> str:
+    """根據 ticker 後綴（市場代碼）回傳國旗 emoji"""
+    suffix = ticker.strip().split()[-1].upper()
+    return {
+        "US": "🇺🇸",
+        "JP": "🇯🇵",
+        "KS": "🇰🇷",
+        "GY": "🇩🇪",
+        "HK": "🇭🇰",
+        "FP": "🇫🇷",
+        "LN": "🇬🇧",
+    }.get(suffix, "🇹🇼")  # 純數字台股或其他預設台灣
+
 def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A") -> str:
     if df.empty:
         return f"📊 <b>{target_date} {fund_id} 持倉異動</b>\n\n今日無異動"
@@ -63,19 +76,22 @@ def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A") 
                 shares_y   = int(row['shares_yest'])
                 delta_s    = int(row['delta_shares'])
 
+            flag   = get_flag(row['ticker']) if fund_id == "00988A" else ""
+            prefix = f"{flag} " if flag else ""
+
             if action in ("建倉", "清倉"):
                 lines.append(
-                    f"  {row['ticker']} {row['name']}\n"
-                    f"  {unit}數：{shares_t:,}{unit}  權重：{row['weight_today']}%"
+                    f"  {prefix}{row['ticker']} {row['name']}\n"
+                    f"  {unit}數：{shares_t:,}{unit}  權重：{row['weight_today']}%\n"
                 )
             else:
                 sign = "+" if delta_s > 0 else ""
                 lines.append(
-                    f"  {row['ticker']} {row['name']}\n"
+                    f"  {prefix}{row['ticker']} {row['name']}\n"
                     f"  {unit}數：{sign}{delta_s:,}{unit} "
                     f"({shares_y:,}→{shares_t:,})\n"
                     f"  權重：{row['weight_yest']}%→{row['weight_today']}%"
-                    f"（{'+' if row['delta']>0 else ''}{row['delta']}%）"
+                    f"（{'+' if row['delta']>0 else ''}{row['delta']}%）\n"
                 )
         lines.append("")
 
