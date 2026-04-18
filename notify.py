@@ -11,8 +11,13 @@ load_dotenv()
 
 
 # ── 設定區 ────────────────────────────────────────
-TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_TOKEN    = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID  = os.getenv("TELEGRAM_CHAT_ID")
+DISCORD_BOT_TOKEN  = os.getenv("DISCORD_BOT_TOKEN")
+DISCORD_CHANNELS = {
+    "00988A": os.getenv("DISCORD_CHANNEL_00988A"),
+    "00981A": os.getenv("DISCORD_CHANNEL_00981A"),
+}
 
 def send_telegram(message: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -25,6 +30,22 @@ def send_telegram(message: str):
         print("[Telegram] 發送成功")
     else:
         print(f"[Telegram] 發送失敗：{resp.text}")
+
+def send_discord(message: str, fund_id: str):
+    channel_id = DISCORD_CHANNELS.get(fund_id)
+    if not DISCORD_BOT_TOKEN or not channel_id:
+        print("[Discord] 未設定 Token 或 Channel ID，跳過")
+        return
+    plain = message.replace("<b>", "**").replace("</b>", "**")
+    url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
+    headers = {"Authorization": f"Bot {DISCORD_BOT_TOKEN}"}
+    chunks = [plain[i:i+2000] for i in range(0, len(plain), 2000)]
+    for chunk in chunks:
+        resp = requests.post(url, headers=headers, json={"content": chunk})
+        if resp.status_code in (200, 201):
+            print("[Discord] 發送成功")
+        else:
+            print(f"[Discord] 發送失敗：{resp.text}")
 
 def get_holdings_count(conn, target_date: str, fund_id: str) -> int:
     """取得 holdings 表中 ≤ target_date 的最新日期持倉總數"""
@@ -146,5 +167,6 @@ if __name__ == "__main__":
         message = format_message(df, target_date, fund_id, conn=conn)
         print(message)
         send_telegram(message)
+        send_discord(message, fund_id)
 
     conn.close()

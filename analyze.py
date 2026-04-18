@@ -10,9 +10,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── 設定區 ────────────────────────────────────────
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-TELEGRAM_TOKEN    = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID  = os.getenv("TELEGRAM_CHAT_ID")
+ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY")
+TELEGRAM_TOKEN     = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID")
+DISCORD_BOT_TOKEN  = os.getenv("DISCORD_BOT_TOKEN")
+DISCORD_CHANNELS = {
+    "00988A": os.getenv("DISCORD_CHANNEL_00988A"),
+    "00981A": os.getenv("DISCORD_CHANNEL_00981A"),
+}
 
 FUND_NAMES = {
     "00988A": "統一全球創新",
@@ -31,6 +36,29 @@ def send_telegram(message: str):
         print("[Telegram] 發送成功")
     else:
         print(f"[Telegram] 發送失敗：{resp.text}")
+
+# ── Discord 發送 ──────────────────────────────────
+def send_discord(message: str, fund_id: str):
+    channel_id = DISCORD_CHANNELS.get(fund_id)
+    if not DISCORD_BOT_TOKEN or not channel_id:
+        print("[Discord] 未設定 Token 或 Channel ID，跳過")
+        return
+
+    clean = message.replace("<b>", "**").replace("</b>", "**")
+    chunks = [clean[i:i+1900] for i in range(0, len(clean), 1900)]
+
+    url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
+    headers = {
+        "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+    for chunk in chunks:
+        resp = requests.post(url, headers=headers, json={"content": chunk})
+        if resp.status_code in (200, 201):
+            print("[Discord] 發送成功")
+        else:
+            print(f"[Discord] 發送失敗：{resp.text}")
 
 # ── 找該基金在 daily_changes 裡 ≤ target_date 的最新日期 ──
 def get_latest_change_date(conn, fund_id: str, target_date: str):
@@ -110,16 +138,18 @@ def call_claude(prompt: str, fund_id: str) -> str:
 
     system = system_map.get(fund_id, system_map["00981A"])
 
-    message = client.messages.create(
+    response = client.messages.create(
         model="claude-sonnet-4-5",
         max_tokens=1024,
         temperature=0.3,
         system=system,
         messages=[{"role": "user", "content": prompt}],
     )
-    return message.content[0].text
+    usage = response.usage
+    print(f"  [Token] input={usage.input_tokens}  output={usage.output_tokens}  total={usage.input_tokens + usage.output_tokens}")
+    return response.content[0].text
 
-# ── 組成 Telegram 訊息 ────────────────────────────
+# ── 組成訊息 ──────────────────────────────────────
 def format_analysis_message(analysis: str, target_date: str, fund_id: str) -> str:
     fund_name = FUND_NAMES.get(fund_id, fund_id)
     return (
@@ -129,25 +159,18 @@ def format_analysis_message(analysis: str, target_date: str, fund_id: str) -> st
     )
 
 # ── 主程式 ────────────────────────────────────────
-# 用法：
-#   python analyze.py                        → 今天為上限，兩檔各找自己最新異動日
-#   python analyze.py 2026-04-01             → 4/1 為上限，兩檔各找自己最新異動日
-#   python analyze.py 2026-04-01 00981A      → 指定日期 + 指定單檔（由 run.py 呼叫）
 if __name__ == "__main__":
     ALL_FUNDS = ["00988A", "00981A"]
 
     if len(sys.argv) == 3:
-        # run.py 呼叫：傳入日期 + fund_id，直接用傳入日期，只跑單檔
         ref_date   = sys.argv[1]
         FUNDS      = [sys.argv[2]]
         fixed_date = True
     elif len(sys.argv) == 2:
-        # 手動執行：只傳日期，兩檔各自找 ≤ 該日期的最新異動日
         ref_date   = sys.argv[1]
         FUNDS      = ALL_FUNDS
         fixed_date = False
     else:
-        # 不傳參數：今天為上限，兩檔各自找最新
         ref_date   = date.today().strftime("%Y-%m-%d")
         FUNDS      = ALL_FUNDS
         fixed_date = False
@@ -157,7 +180,6 @@ if __name__ == "__main__":
     for fund_id in FUNDS:
         print(f"\n{'='*40}")
 
-        # 決定實際分析日期
         if fixed_date:
             actual_date = ref_date
         else:
@@ -175,7 +197,6 @@ if __name__ == "__main__":
             continue
 
         print(f"  異動筆數：{len(df)}")
-
         prompt = build_prompt(df, actual_date, fund_id)
         print("  呼叫 Claude API...")
 
@@ -188,6 +209,7 @@ if __name__ == "__main__":
         message = format_analysis_message(analysis, actual_date, fund_id)
         print(message)
         send_telegram(message)
+        send_discord(message, fund_id)
 
     conn.close()
     print(f"\n✅ 分析完成")
