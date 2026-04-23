@@ -99,7 +99,7 @@ def save_changes(conn, diff_df, today_date, yesterday_date, fund_id="00988A"):
 
 
 if __name__ == "__main__":
-    FUNDS = ["00988A", "00981A"]
+    FUNDS = ["00988A", "00981A", "00992A"]
 
     if len(sys.argv) == 3:
         TODAY     = sys.argv[1]

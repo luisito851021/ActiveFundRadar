@@ -47,6 +47,33 @@ def parse_etf_xlsx(filepath, fund_id="00988A"):
     holdings["fund_id"] = fund_id
     return holdings[["fund_id", "date", "ticker", "name", "shares", "weight"]]
 
+def parse_00992A_xlsx(filepath):
+    """解析群益 00992A 的 xlsx（股票 sheet，第一行即 header，無日期欄）"""
+    filename = os.path.basename(filepath)
+    date_match = re.search(r"(\d{4}-\d{2}-\d{2})", filename)
+    data_date = date_match.group(1) if date_match else date.today().strftime("%Y-%m-%d")
+
+    df = pd.read_excel(filepath, sheet_name="股票", header=0)
+    df = df.dropna(subset=["股票代號"])
+    df = df.rename(columns={
+        "股票代號":    "ticker",
+        "股票名稱":    "name",
+        "持股權重(%)": "weight",
+        "股數":        "shares",
+    })
+
+    df["weight"] = (
+        df["weight"].astype(str).str.replace("%", "").str.strip()
+        .pipe(pd.to_numeric, errors="coerce") / 100
+    )
+    df["shares"] = pd.to_numeric(
+        df["shares"].astype(str).str.replace(",", ""), errors="coerce"
+    )
+    df["date"]    = data_date
+    df["fund_id"] = "00992A"
+    return df[["fund_id", "date", "ticker", "name", "shares", "weight"]]
+
+
 def save_to_db(holdings_df, db_path="etf.db"):
     conn     = sqlite3.connect(db_path)
     date_val = holdings_df["date"].iloc[0]
@@ -88,5 +115,17 @@ if __name__ == "__main__":
         print(f"\n[{fund['fund_id']}] 使用檔案：{os.path.basename(xlsx_path)}")
 
         holdings = parse_etf_xlsx(xlsx_path, fund_id=fund["fund_id"])
+        print(holdings)
+        save_to_db(holdings)
+
+    # 00992A 群益（獨立格式）
+    folder_992 = os.path.join(base_folder, "00992A")
+    files_992  = glob.glob(os.path.join(folder_992, "00992A_*.xlsx"))
+    if not files_992:
+        print("[跳過] 00992A 找不到任何 xlsx 檔案")
+    else:
+        xlsx_path = sorted(files_992)[-1]
+        print(f"\n[00992A] 使用檔案：{os.path.basename(xlsx_path)}")
+        holdings = parse_00992A_xlsx(xlsx_path)
         print(holdings)
         save_to_db(holdings)

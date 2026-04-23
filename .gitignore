@@ -7,6 +7,9 @@ etf.db
 # 每日下載的 Excel 檔
 Files/
 
+# 平台特定的 ChromeDriver（需各自下載對應版本）
+chromedriver.exe
+
 # Python 暫存
 __pycache__/
 *.pyc

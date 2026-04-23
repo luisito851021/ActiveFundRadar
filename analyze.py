@@ -7,6 +7,8 @@ import os
 from datetime import date
 from dotenv import load_dotenv
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 load_dotenv()
 
 # ── 設定區 ────────────────────────────────────────
@@ -17,12 +19,16 @@ DISCORD_BOT_TOKEN  = os.getenv("DISCORD_BOT_TOKEN")
 DISCORD_CHANNELS = {
     "00988A": os.getenv("DISCORD_CHANNEL_00988A"),
     "00981A": os.getenv("DISCORD_CHANNEL_00981A"),
+    "00992A": os.getenv("DISCORD_CHANNEL_00992A"),
 }
 
 FUND_NAMES = {
     "00988A": "統一全球創新",
     "00981A": "統一台股增長",
+    "00992A": "群益台灣科技創新",
 }
+
+DISCORD_ONLY_FUNDS = {"00992A"}
 
 # ── Telegram 發送 ─────────────────────────────────
 def send_telegram(message: str):
@@ -134,6 +140,11 @@ def call_claude(prompt: str, fund_id: str) -> str:
             "你是一位專業的台灣股票市場分析師，熟悉主動型 ETF 的運作機制與台灣上市公司。"
             "請根據基金的每日持倉異動資料，提供簡潔、有洞察力的繁體中文分析。"
         ),
+        "00992A": (
+            "你是一位專業的台灣科技股市場分析師，熟悉主動型 ETF 的運作機制，"
+            "專注於台灣半導體、AI、電子、通訊等科技產業的產業趨勢與個股選股邏輯。"
+            "請根據基金的每日持倉異動資料，提供簡潔、有洞察力的繁體中文分析。"
+        ),
     }
 
     system = system_map.get(fund_id, system_map["00981A"])
@@ -160,7 +171,7 @@ def format_analysis_message(analysis: str, target_date: str, fund_id: str) -> st
 
 # ── 主程式 ────────────────────────────────────────
 if __name__ == "__main__":
-    ALL_FUNDS = ["00988A", "00981A"]
+    ALL_FUNDS = ["00988A", "00981A", "00992A"]
 
     if len(sys.argv) == 3:
         ref_date   = sys.argv[1]
@@ -208,7 +219,8 @@ if __name__ == "__main__":
 
         message = format_analysis_message(analysis, actual_date, fund_id)
         print(message)
-        send_telegram(message)
+        if fund_id not in DISCORD_ONLY_FUNDS:
+            send_telegram(message)
         send_discord(message, fund_id)
 
     conn.close()

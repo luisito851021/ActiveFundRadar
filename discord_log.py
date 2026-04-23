@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-SYSLOG_CHANNEL_ID = os.getenv("DISCORD_SYSLOG_CHANNEL", "1495750340971200553")
+SYSLOG_CHANNEL_ID = os.getenv("DISCORD_SYSLOG_CHANNEL")
 
 def send_syslog(message: str):
-    if not DISCORD_BOT_TOKEN:
-        print("[SysLog] 未設定 DISCORD_BOT_TOKEN，跳過")
+    if not DISCORD_BOT_TOKEN or not SYSLOG_CHANNEL_ID:
+        print("[SysLog] 未設定 DISCORD_BOT_TOKEN 或 DISCORD_SYSLOG_CHANNEL，跳過")
         return
     url = f"https://discord.com/api/v10/channels/{SYSLOG_CHANNEL_ID}/messages"
     headers = {"Authorization": f"Bot {DISCORD_BOT_TOKEN}"}

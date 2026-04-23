@@ -140,7 +140,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     steps      = {}
-    fund_stats = {"00988A": {}, "00981A": {}}
+    fund_stats = {"00988A": {}, "00981A": {}, "00992A": {}}
 
     # Step 1：下載 XLSX
     ok, _ = _run("download.py")
@@ -165,7 +165,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Step 3：各 ETF diff → notify → analyze
-    for fund_id in ["00988A", "00981A"]:
+    for fund_id in ["00988A", "00981A", "00992A"]:
         latest = _get_latest_date(fund_id)
         if not latest:
             print(f"[跳過] {fund_id} 資料庫無資料")

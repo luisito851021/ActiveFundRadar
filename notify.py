@@ -6,6 +6,8 @@ import sys
 import os
 from dotenv import load_dotenv
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 load_dotenv()
 
 
@@ -17,7 +19,11 @@ DISCORD_BOT_TOKEN  = os.getenv("DISCORD_BOT_TOKEN")
 DISCORD_CHANNELS = {
     "00988A": os.getenv("DISCORD_CHANNEL_00988A"),
     "00981A": os.getenv("DISCORD_CHANNEL_00981A"),
+    "00992A": os.getenv("DISCORD_CHANNEL_00992A"),
 }
+
+# 只發 Discord、不發 Telegram 的基金
+DISCORD_ONLY_FUNDS = {"00992A"}
 
 def send_telegram(message: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -114,7 +120,7 @@ def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A", 
         lines.append(f"{symbol} <b>{action}</b>")
         for _, row in subset.iterrows():
             # 00981A 台股用張（1張=1000股），00988A 用股
-            if fund_id == "00981A":
+            if fund_id in ("00981A", "00992A"):
                 unit       = "張"
                 shares_t   = int(row['shares_today']) // 1000
                 shares_y   = int(row['shares_yest'])  // 1000
@@ -147,11 +153,11 @@ def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A", 
     return "\n".join(lines)
 
 if __name__ == "__main__":
-    FUNDS = ["00988A", "00981A"]
+    FUNDS = ["00988A", "00981A", "00992A"]
 
     if len(sys.argv) == 3:
         target_date = sys.argv[1]
-        FUNDS = [sys.argv[2]]        
+        FUNDS = [sys.argv[2]]
     elif len(sys.argv) == 2:
         target_date = sys.argv[1]
     else:
@@ -166,7 +172,8 @@ if __name__ == "__main__":
             continue
         message = format_message(df, target_date, fund_id, conn=conn)
         print(message)
-        send_telegram(message)
+        if fund_id not in DISCORD_ONLY_FUNDS:
+            send_telegram(message)
         send_discord(message, fund_id)
 
     conn.close()
