@@ -4,6 +4,7 @@ import re
 import os
 from datetime import datetime
 import sqlite3
+import requests
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -63,6 +64,22 @@ def _parse_tokens(output):
     return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else (None, None, None)
 
 
+def _is_holiday(date_str: str):
+    """回傳 (is_holiday: bool, description: str)，抓取失敗時 fail open 回傳 False。"""
+    year = date_str[:4]
+    date_key = date_str.replace("-", "")
+    url = f"https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/{year}.json"
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        for entry in resp.json():
+            if entry["date"] == date_key:
+                return entry["isHoliday"], entry.get("description", "")
+    except Exception as e:
+        print(f"[假日判斷] 無法取得行事曆資料：{e}，略過假日檢查繼續執行")
+    return False, ""
+
+
 def _icon(val):
     return {True: "✅", False: "❌", None: "➖"}.get(val, "➖")
 
@@ -111,7 +128,16 @@ def _build_report(start_str, steps, fund_stats, elapsed):
 if __name__ == "__main__":
     start = datetime.now()
     start_str = start.strftime("%Y-%m-%d %H:%M:%S")
+    today_str = start.strftime("%Y-%m-%d")
     print(f"\n🚀 ActiveFundRadar 自動執行開始：{start_str}")
+
+    is_holiday, holiday_desc = _is_holiday(today_str)
+    if is_holiday:
+        reason = holiday_desc if holiday_desc else "國定假日／例假日"
+        msg = f"📅 **ActiveFundRadar**\n🕐 {start_str}\n\n今日為【{reason}】，資料未更新，跳過執行。"
+        print(f"[假日] {reason}，跳過執行")
+        send_syslog(msg)
+        sys.exit(0)
 
     steps      = {}
     fund_stats = {"00988A": {}, "00981A": {}}
