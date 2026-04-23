@@ -139,7 +139,7 @@ def call_claude(prompt: str, fund_id: str) -> str:
     system = system_map.get(fund_id, system_map["00981A"])
 
     response = client.messages.create(
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-4-6",
         max_tokens=1024,
         temperature=0.3,
         system=system,
