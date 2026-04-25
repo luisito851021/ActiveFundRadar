@@ -2,6 +2,7 @@ import sqlite3
 import pandas as pd
 from datetime import date, timedelta
 import sys
+from db_utils import sync_to_supabase
 
 def get_holdings(conn, date_str, fund_id="00988A"):
     return pd.read_sql(
@@ -96,6 +97,7 @@ def save_changes(conn, diff_df, today_date, yesterday_date, fund_id="00988A"):
     print(f"[成功] 寫入 {len(save_df)} 筆異動記錄")
     print(save_df[["ticker", "action", "shares_yest", "shares_today",
                    "delta_shares", "weight_yest", "weight_today", "delta"]].to_string(index=False))
+    sync_to_supabase(save_df, "daily_changes")
 
 
 if __name__ == "__main__":

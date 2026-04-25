@@ -4,6 +4,7 @@ import re
 import glob
 import os
 from datetime import date
+from db_utils import sync_to_supabase
 
 FUND_CONFIGS = [
     {"file_pattern": "ETF_Investment_Portfolio_*.xlsx", "fund_id": "00988A"},
@@ -89,6 +90,9 @@ def save_to_db(holdings_df, db_path="etf.db"):
     else:
         holdings_df.to_sql("holdings", conn, if_exists="append", index=False)
         print(f"[成功] {fund_val} 寫入 {len(holdings_df)} 筆 ({date_val})")
+        conn.close()
+        sync_to_supabase(holdings_df, "holdings")
+        return
 
     conn.close()
 
