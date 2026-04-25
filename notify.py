@@ -1,10 +1,13 @@
 import sqlite3
 import pandas as pd
 import requests
+import re
 from datetime import date
 import sys
 import os
 from dotenv import load_dotenv
+
+WEB_URL = "https://ezmoneysniper.streamlit.app"
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -43,6 +46,7 @@ def send_discord(message: str, fund_id: str):
         print("[Discord] 未設定 Token 或 Channel ID，跳過")
         return
     plain = message.replace("<b>", "**").replace("</b>", "**")
+    plain = re.sub(r'<a href="([^"]+)">([^<]+)</a>', r"[\2](\1)", plain)
     url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
     headers = {"Authorization": f"Bot {DISCORD_BOT_TOKEN}"}
     chunks = [plain[i:i+2000] for i in range(0, len(plain), 2000)]
@@ -150,6 +154,7 @@ def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A", 
                 )
         lines.append("")
 
+    lines.append(f'🔗 <a href="{WEB_URL}">查看完整持倉 → ezMoneySniper</a>')
     return "\n".join(lines)
 
 if __name__ == "__main__":
