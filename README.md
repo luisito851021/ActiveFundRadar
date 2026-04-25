@@ -2,22 +2,23 @@
 
 自動追蹤台灣主動型 ETF 每日持倉變化，透過 Telegram 與 Discord 推送異動明細與 AI 選股分析。
 
+網頁查詢介面請見 [ezMoneySniper](https://github.com/luisito851021/ezMoneySniper)。
+
 ## 監控標的
 
-| ETF 代號 | 名稱 |
-|---|---|
-| 00988A | 統一全球創新 |
-| 00981A | 統一台股增長 |
+| ETF 代號 | 名稱 | 通知管道 |
+|---|---|---|
+| 00988A | 統一全球創新 | Telegram + Discord |
+| 00981A | 統一台股增長 | Telegram + Discord |
+| 00992A | 群益台灣科技創新 | Discord 限定 |
 
 ## 功能
 
-- 每日自動下載持倉 xlsx 並寫入 SQLite 資料庫
+- 每日自動下載持倉 xlsx 並寫入 SQLite 資料庫（同步備份至 Supabase）
 - 比對前後兩日持倉，偵測建倉／清倉／加碼／減碼
-- 透過 Telegram Bot 推送異動明細
+- 透過 Telegram Bot 推送異動明細（00988A、00981A）
 - 透過 Discord Bot 推送異動明細（各基金對應獨立頻道）
-- 呼叫 Claude API（claude-sonnet-4-5）分析經理人選股邏輯，同步發送至 Telegram 與 Discord
-- 顯示每次 Claude API Token 消耗量（input / output / total）
-- Streamlit 網頁介面查看當日異動與歷史記錄
+- 呼叫 Claude API 分析經理人選股邏輯，同步發送至 Telegram 與 Discord
 
 ## 專案結構
 
@@ -29,7 +30,7 @@ ActiveFundRadar/
 ├── diff.py           # 比對持倉差異
 ├── notify.py         # 格式化並發送 Telegram / Discord 通知
 ├── analyze.py        # 呼叫 Claude API 進行選股分析並推送
-├── app.py            # Streamlit 網頁介面
+├── db_utils.py       # SQLite + Supabase 雙寫工具
 ├── init_db.py        # 初始化 SQLite 資料庫
 ├── requirements.txt
 ├── .env              # 敏感設定（不進 Git）
@@ -57,6 +58,10 @@ TELEGRAM_CHAT_ID=你的_Chat_ID
 DISCORD_BOT_TOKEN=你的_Discord_Bot_Token
 DISCORD_CHANNEL_00988A=00988A_對應的頻道_ID
 DISCORD_CHANNEL_00981A=00981A_對應的頻道_ID
+DISCORD_CHANNEL_00992A=00992A_對應的頻道_ID
+
+SUPABASE_URL=postgresql://...
+SQLITE_PATH=C:\ActiveFundRadar\etf.db
 ```
 
 ### 3. 初始化資料庫
@@ -97,12 +102,6 @@ python notify.py 2026-04-01 00988A        # 發送通知
 python analyze.py 2026-04-01 00988A       # AI 分析
 ```
 
-### 啟動網頁介面
-
-```bash
-python -m streamlit run app.py
-```
-
 ## 自動排程
 
 使用 Windows 工作排程器，設定每個交易日執行 `run.py`。
@@ -110,6 +109,7 @@ python -m streamlit run app.py
 ## 注意事項
 
 - `.env`、`etf.db`、`Files/` 資料夾均不進版本控制
-- Cookie 有效期約數天，過期需手動更新
-- 00981A 持股單位為張（1張=1000股），00988A 為股
+- 00988A 為全球股票（持股單位：股）；00981A、00992A 為台灣股票（持股單位：張，1張=1000股）
+- 00992A 使用 Selenium + ChromeDriver 下載，chromedriver.exe 需手動放置於專案根目錄
 - Claude API Token 消耗量會於每次分析後印出至 console
+- 網頁查詢介面請使用 [ezMoneySniper](https://github.com/luisito851021/ezMoneySniper)
