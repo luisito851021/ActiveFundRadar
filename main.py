@@ -97,6 +97,9 @@ def save_to_db(holdings_df, db_path="etf.db"):
     conn.close()
 
 if __name__ == "__main__":
+    import sys
+    target = sys.argv[1:] if len(sys.argv) > 1 else ["00988A", "00981A", "00992A"]
+
     base_folder = r"C:\ActiveFundRadar\Files"
 
     funds = [
@@ -105,8 +108,9 @@ if __name__ == "__main__":
     ]
 
     for fund in funds:
+        if fund["fund_id"] not in target:
+            continue
         folder = os.path.join(base_folder, fund["folder"])
-        # 優先找有基金代碼前綴的檔案，找不到再找一般檔名
         files = glob.glob(os.path.join(folder, f"{fund['fund_id']}_ETF_Investment_Portfolio_*.xlsx"))
         if not files:
             files = glob.glob(os.path.join(folder, "ETF_Investment_Portfolio_*.xlsx"))
@@ -123,13 +127,14 @@ if __name__ == "__main__":
         save_to_db(holdings)
 
     # 00992A 群益（獨立格式）
-    folder_992 = os.path.join(base_folder, "00992A")
-    files_992  = glob.glob(os.path.join(folder_992, "00992A_*.xlsx"))
-    if not files_992:
-        print("[跳過] 00992A 找不到任何 xlsx 檔案")
-    else:
-        xlsx_path = sorted(files_992)[-1]
-        print(f"\n[00992A] 使用檔案：{os.path.basename(xlsx_path)}")
-        holdings = parse_00992A_xlsx(xlsx_path)
-        print(holdings)
-        save_to_db(holdings)
+    if "00992A" in target:
+        folder_992 = os.path.join(base_folder, "00992A")
+        files_992  = glob.glob(os.path.join(folder_992, "00992A_*.xlsx"))
+        if not files_992:
+            print("[跳過] 00992A 找不到任何 xlsx 檔案")
+        else:
+            xlsx_path = sorted(files_992)[-1]
+            print(f"\n[00992A] 使用檔案：{os.path.basename(xlsx_path)}")
+            holdings = parse_00992A_xlsx(xlsx_path)
+            print(holdings)
+            save_to_db(holdings)

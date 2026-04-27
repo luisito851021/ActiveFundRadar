@@ -149,6 +149,12 @@ def download_00992A_selenium():
 
 
 if __name__ == "__main__":
+    import sys
+    target = sys.argv[1:] if len(sys.argv) > 1 else ["00988A", "00981A", "00992A"]
+
     for fund in FUND_CONFIGS:
-        download_etf_excel(fund["code"], fund["name"])
-    download_00992A_selenium()
+        if fund["name"] in target:
+            download_etf_excel(fund["code"], fund["name"])
+
+    if "00992A" in target:
+        download_00992A_selenium()

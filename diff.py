@@ -101,17 +101,12 @@ def save_changes(conn, diff_df, today_date, yesterday_date, fund_id="00988A"):
 
 
 if __name__ == "__main__":
-    FUNDS = ["00988A", "00981A", "00992A"]
+    # 用法：python diff.py DATE [FUND_IDs...]
+    # 例：python diff.py 2026-04-25 00992A
+    ALL_FUNDS = ["00988A", "00981A", "00992A"]
 
-    if len(sys.argv) == 3:
-        TODAY     = sys.argv[1]
-        YESTERDAY = sys.argv[2]
-    elif len(sys.argv) == 2:
-        TODAY     = sys.argv[1]
-        YESTERDAY = None
-    else:
-        TODAY     = date.today().strftime("%Y-%m-%d")
-        YESTERDAY = None
+    TODAY = sys.argv[1] if len(sys.argv) >= 2 else date.today().strftime("%Y-%m-%d")
+    FUNDS = sys.argv[2:] if len(sys.argv) > 2 else ALL_FUNDS
 
     conn = sqlite3.connect("etf.db")
 
@@ -120,7 +115,7 @@ if __name__ == "__main__":
         print(f"處理：{fund_id}")
 
         # 自動找前一個有資料的交易日
-        prev = YESTERDAY
+        prev = None
         if prev is None:
             result = pd.read_sql(
                 f"SELECT date FROM holdings WHERE date < '{TODAY}' AND fund_id='{fund_id}' ORDER BY date DESC LIMIT 1",

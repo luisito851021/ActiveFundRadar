@@ -125,11 +125,20 @@ def _build_report(start_str, steps, fund_stats, elapsed):
     return "\n".join(lines)
 
 
+ALL_FUNDS = ["00988A", "00981A", "00992A"]
+
 if __name__ == "__main__":
+    # 可傳入基金代號限定執行範圍，例如：python run.py 00992A
+    target_funds = sys.argv[1:] if len(sys.argv) > 1 else ALL_FUNDS
+    for _f in target_funds:
+        if _f not in ALL_FUNDS:
+            print(f"[錯誤] 未知的基金代號：{_f}，可用：{ALL_FUNDS}")
+            sys.exit(1)
+
     start = datetime.now()
     start_str = start.strftime("%Y-%m-%d %H:%M:%S")
     today_str = start.strftime("%Y-%m-%d")
-    print(f"\n🚀 ActiveFundRadar 自動執行開始：{start_str}")
+    print(f"\n🚀 ActiveFundRadar 自動執行開始：{start_str}  基金：{target_funds}")
 
     is_holiday, holiday_desc = _is_holiday(today_str)
     if is_holiday:
@@ -140,10 +149,10 @@ if __name__ == "__main__":
         sys.exit(0)
 
     steps      = {}
-    fund_stats = {"00988A": {}, "00981A": {}, "00992A": {}}
+    fund_stats = {f: {} for f in target_funds}
 
-    # Step 1：下載 XLSX
-    ok, _ = _run("download.py")
+    # Step 1：下載 XLSX（只下載 target_funds）
+    ok, _ = _run("download.py", target_funds)
     steps["download"] = ok
     if not ok:
         print("[中止] 下載失敗，請檢查網路或 Cookie 是否過期")
@@ -153,8 +162,8 @@ if __name__ == "__main__":
         )
         sys.exit(1)
 
-    # Step 2：寫入資料庫
-    ok, _ = _run("main.py")
+    # Step 2：寫入資料庫（只處理 target_funds）
+    ok, _ = _run("main.py", target_funds)
     steps["main"] = ok
     if not ok:
         print("[中止] 寫入資料庫失敗")
@@ -165,7 +174,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Step 3：各 ETF diff → notify → analyze
-    for fund_id in ["00988A", "00981A", "00992A"]:
+    for fund_id in target_funds:
         latest = _get_latest_date(fund_id)
         if not latest:
             print(f"[跳過] {fund_id} 資料庫無資料")
@@ -174,7 +183,7 @@ if __name__ == "__main__":
         fund_stats[fund_id]["date"] = latest
         print(f"\n📅 {fund_id} 最新日期：{latest}")
 
-        ok, _ = _run("diff.py", [latest])
+        ok, _ = _run("diff.py", [latest, fund_id])
         steps[f"diff_{fund_id}"] = ok
         if not ok:
             print(f"[警告] {fund_id} diff 執行失敗")
