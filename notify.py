@@ -96,6 +96,64 @@ def get_flag(ticker: str) -> str:
         "LN": "🇬🇧",
     }.get(suffix, "🇹🇼")  # 純數字台股或其他預設台灣
 
+_MARKET_SUFFIX = {
+    "US": "",
+    "JP": ".T",
+    "KS": ".KS",
+    "GY": ".DE",
+    "HK": ".HK",
+    "FP": ".PA",
+    "LN": ".L",
+    "TW": ".TW",
+}
+
+def to_yahoo_ticker(bloomberg_ticker: str) -> str:
+    parts = bloomberg_ticker.strip().split()
+    base = parts[0]
+    suffix = parts[1].upper() if len(parts) > 1 else ""
+    if not suffix and base.isdigit():
+        return base + ".TW"
+    return base + _MARKET_SUFFIX.get(suffix, "")
+
+def fetch_price_changes(bloomberg_tickers: list) -> dict:
+    """批次抓取 Yahoo Finance 當日漲幅，回傳 {bloomberg_ticker: '+3.24%'}"""
+    yahoo_to_bb = {}
+    for bt in bloomberg_tickers:
+        yt = to_yahoo_ticker(bt)
+        if yt:
+            yahoo_to_bb[yt] = bt
+
+    if not yahoo_to_bb:
+        return {}
+
+    try:
+        import yfinance as yf
+        import pandas as pd
+
+        yt_list = list(yahoo_to_bb.keys())
+        raw = yf.download(yt_list, period="5d", auto_adjust=True, progress=False)
+
+        if isinstance(raw.columns, pd.MultiIndex):
+            close = raw["Close"]
+        else:
+            close = raw[["Close"]].rename(columns={"Close": yt_list[0]})
+
+        result = {}
+        for yt, bt in yahoo_to_bb.items():
+            if yt not in close.columns:
+                continue
+            series = close[yt].dropna()
+            if len(series) < 2:
+                continue
+            prev, curr = series.iloc[-2], series.iloc[-1]
+            if prev > 0:
+                val = (curr - prev) / prev * 100
+                result[bt] = f"{'+' if val >= 0 else ''}{val:.2f}%"
+        return result
+    except Exception as e:
+        print(f"[yfinance] 抓取失敗：{e}")
+        return {}
+
 def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A", conn=None) -> str:
     if df.empty:
         return f"📊 <b>{target_date} {fund_id} 持倉異動</b>\n\n今日無異動"
@@ -106,6 +164,12 @@ def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A", 
     n_add   = len(df[df["action"] == "加碼"])
     n_cut   = len(df[df["action"] == "減碼"])
     n_close = len(df[df["action"] == "清倉"])
+
+    # ── 00988A 批次抓取 Yahoo Finance 漲幅 ────────
+    price_changes = {}
+    if fund_id == "00988A":
+        print("[yfinance] 抓取持股漲幅中...")
+        price_changes = fetch_price_changes(df["ticker"].tolist())
 
     lines = [
         f"📊 <b>{target_date} {fund_id} 持倉異動</b>",
@@ -138,11 +202,14 @@ def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A", 
 
             flag   = get_flag(row['ticker']) if fund_id == "00988A" else ""
             prefix = f"{flag} " if flag else ""
+            pct_str = price_changes.get(row['ticker'], "")
+            pct_part = f"  漲幅：{pct_str}\n" if pct_str else ""
 
             if action in ("建倉", "清倉"):
                 lines.append(
                     f"  {prefix}{row['ticker']} {row['name']}\n"
                     f"  {unit}數：{shares_t:,}{unit}  權重：{row['weight_today']}%\n"
+                    f"{pct_part}"
                 )
             else:
                 sign = "+" if delta_s > 0 else ""
@@ -152,6 +219,7 @@ def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A", 
                     f"({shares_y:,}→{shares_t:,})\n"
                     f"  權重：{row['weight_yest']}%→{row['weight_today']}%"
                     f"（{'+' if row['delta']>0 else ''}{row['delta']}%）\n"
+                    f"{pct_part}"
                 )
         lines.append("")
 
