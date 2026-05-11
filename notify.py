@@ -23,6 +23,7 @@ DISCORD_CHANNELS = {
     "00988A": os.getenv("DISCORD_CHANNEL_00988A"),
     "00981A": os.getenv("DISCORD_CHANNEL_00981A"),
     "00992A": os.getenv("DISCORD_CHANNEL_00992A"),
+    "00403A": os.getenv("DISCORD_CHANNEL_00403A"),
 }
 
 # 只發 Discord、不發 Telegram 的基金
@@ -124,7 +125,7 @@ def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A", 
         lines.append(f"{symbol} <b>{action}</b>")
         for _, row in subset.iterrows():
             # 00981A 台股用張（1張=1000股），00988A 用股
-            if fund_id in ("00981A", "00992A"):
+            if fund_id in ("00981A", "00992A", "00403A"):
                 unit       = "張"
                 shares_t   = int(row['shares_today']) // 1000
                 shares_y   = int(row['shares_yest'])  // 1000
@@ -158,7 +159,7 @@ def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A", 
     return "\n".join(lines)
 
 if __name__ == "__main__":
-    FUNDS = ["00988A", "00981A", "00992A"]
+    FUNDS = ["00988A", "00981A", "00992A", "00403A"]
 
     if len(sys.argv) == 3:
         target_date = sys.argv[1]

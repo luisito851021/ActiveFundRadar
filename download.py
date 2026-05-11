@@ -23,6 +23,7 @@ COOKIES = {
 FUND_CONFIGS = [
     {"code": "61YTW", "name": "00988A"},
     {"code": "49YTW", "name": "00981A"},
+    {"code": "63YTW", "name": "00403A"},
 ]
 
 CAPITAL_00992A_URL = "https://www.capitalfund.com.tw/etf/product/detail/500/portfolio"
@@ -150,7 +151,7 @@ def download_00992A_selenium():
 
 if __name__ == "__main__":
     import sys
-    target = sys.argv[1:] if len(sys.argv) > 1 else ["00988A", "00981A", "00992A"]
+    target = sys.argv[1:] if len(sys.argv) > 1 else ["00988A", "00981A", "00992A", "00403A"]
 
     for fund in FUND_CONFIGS:
         if fund["name"] in target:

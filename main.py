@@ -98,13 +98,14 @@ def save_to_db(holdings_df, db_path="etf.db"):
 
 if __name__ == "__main__":
     import sys
-    target = sys.argv[1:] if len(sys.argv) > 1 else ["00988A", "00981A", "00992A"]
+    target = sys.argv[1:] if len(sys.argv) > 1 else ["00988A", "00981A", "00992A", "00403A"]
 
     base_folder = r"C:\ActiveFundRadar\Files"
 
     funds = [
         {"folder": "00988A", "fund_id": "00988A"},
         {"folder": "00981A", "fund_id": "00981A"},
+        {"folder": "00403A", "fund_id": "00403A"},
     ]
 
     for fund in funds:

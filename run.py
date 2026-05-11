@@ -125,7 +125,7 @@ def _build_report(start_str, steps, fund_stats, elapsed):
     return "\n".join(lines)
 
 
-ALL_FUNDS = ["00988A", "00981A", "00992A"]
+ALL_FUNDS = ["00988A", "00981A", "00992A", "00403A"]
 
 if __name__ == "__main__":
     # 可傳入基金代號限定執行範圍，例如：python run.py 00992A
