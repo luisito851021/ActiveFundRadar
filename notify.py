@@ -241,9 +241,6 @@ if __name__ == "__main__":
 
     for fund_id in FUNDS:
         df = get_daily_changes(conn, target_date, fund_id)
-        if df.empty:
-            print(f"[跳過] {fund_id} {target_date} 無異動資料")
-            continue
         message = format_message(df, target_date, fund_id, conn=conn)
         print(message)
         if fund_id not in DISCORD_ONLY_FUNDS:
