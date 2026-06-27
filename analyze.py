@@ -21,6 +21,8 @@ DISCORD_CHANNELS = {
     "00981A": os.getenv("DISCORD_CHANNEL_00981A"),
     "00992A": os.getenv("DISCORD_CHANNEL_00992A"),
     "00403A": os.getenv("DISCORD_CHANNEL_00403A"),
+    "00991A": os.getenv("DISCORD_CHANNEL_00991A"),
+    "00990A": os.getenv("DISCORD_CHANNEL_00990A"),
 }
 
 FUND_NAMES = {
@@ -28,9 +30,11 @@ FUND_NAMES = {
     "00981A": "統一台股增長",
     "00992A": "群益台灣科技創新",
     "00403A": "統一台股升級50",
+    "00991A": "復華未來50",
+    "00990A": "元大全球AI",
 }
 
-DISCORD_ONLY_FUNDS = {"00992A"}
+DISCORD_ONLY_FUNDS = {"00992A", "00990A", "00991A"}
 
 # ── Telegram 發送 ─────────────────────────────────
 def send_telegram(message: str):
@@ -152,6 +156,17 @@ def call_claude(prompt: str, fund_id: str) -> str:
             "專注於台灣50大市值企業的產業趨勢與選股邏輯。"
             "請根據基金的每日持倉異動資料，提供簡潔、有洞察力的繁體中文分析。"
         ),
+        "00991A": (
+            "你是一位專業的台灣股票市場分析師，熟悉主動型 ETF 的運作機制與台灣上市公司。"
+            "專注於台灣中小型成長股、科技產業與新興題材的趨勢與個股選股邏輯。"
+            "請根據基金的每日持倉異動資料，提供簡潔、有洞察力的繁體中文分析。"
+        ),
+        "00990A": (
+            "你是一位專業的全球科技股市場分析師，熟悉主動型 ETF 的運作機制，"
+            "專注於 AI、半導體、記憶體、資料中心等科技產業的全球趨勢與個股選股邏輯，"
+            "涵蓋美股、日股、韓股、德股及台股。"
+            "請根據基金的每日持倉異動資料，提供簡潔、有洞察力的繁體中文分析。"
+        ),
     }
 
     system = system_map.get(fund_id, system_map["00981A"])
@@ -178,7 +193,7 @@ def format_analysis_message(analysis: str, target_date: str, fund_id: str) -> st
 
 # ── 主程式 ────────────────────────────────────────
 if __name__ == "__main__":
-    ALL_FUNDS = ["00988A", "00981A", "00992A", "00403A"]
+    ALL_FUNDS = ["00988A", "00981A", "00992A", "00403A", "00991A", "00990A"]
 
     if len(sys.argv) == 3:
         ref_date   = sys.argv[1]

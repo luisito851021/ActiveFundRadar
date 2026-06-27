@@ -2,6 +2,7 @@ import requests
 import urllib3
 import glob
 import os
+import re
 from datetime import datetime
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -90,9 +91,7 @@ def download_00992A_selenium():
         "download.directory_upgrade":   True,
     })
 
-    chromedriver_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chromedriver.exe")
-    service = webdriver.ChromeService(executable_path=chromedriver_path)
-    driver  = webdriver.Chrome(service=service, options=options)
+    driver = webdriver.Chrome(options=options)
     # headless 模式需要 CDP 才能正常下載
     driver.execute_cdp_cmd("Page.setDownloadBehavior", {
         "behavior":     "allow",
@@ -149,9 +148,133 @@ def download_00992A_selenium():
         driver.quit()
 
 
+def download_00991A_http():
+    """從復華官網抓最新日期，下載 00991A 持倉 xlsx"""
+    fund_id = "00991A"
+    fund_folder = os.path.join(SAVE_FOLDER, fund_id)
+    os.makedirs(fund_folder, exist_ok=True)
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+    }
+
+    # Step 1：抓頁面取得最新日期（格式 /api/assetsExcel/ETF23/YYYYMMDD）
+    try:
+        resp = requests.get(
+            "https://www.fhtrust.com.tw/ETF/etf_detail/ETF23",
+            headers=headers, timeout=30,
+        )
+        resp.raise_for_status()
+        m = re.search(r"/api/assetsExcel/ETF23/(\d{8})", resp.text)
+        if not m:
+            print(f"[錯誤] {fund_id} 找不到最新日期")
+            return None
+        date_raw = m.group(1)                                      # "20260625"
+        date_str = f"{date_raw[:4]}-{date_raw[4:6]}-{date_raw[6:]}"  # "2026-06-25"
+    except Exception as e:
+        print(f"[錯誤] {fund_id} 取得日期失敗：{e}")
+        return None
+
+    save_path = os.path.join(fund_folder, f"{fund_id}_{date_str}.xlsx")
+    if os.path.exists(save_path):
+        print(f"[跳過] {fund_id} 今日檔案已存在 → {os.path.basename(save_path)}")
+        return save_path
+
+    # Step 2：下載 xlsx
+    api_url = f"https://www.fhtrust.com.tw/api/assetsExcel/ETF23/{date_raw}"
+    try:
+        resp = requests.get(api_url, headers=headers, timeout=30)
+        resp.raise_for_status()
+        with open(save_path, "wb") as f:
+            f.write(resp.content)
+        print(f"[成功] {fund_id} 下載完成 → {os.path.basename(save_path)}")
+        return save_path
+    except Exception as e:
+        print(f"[錯誤] {fund_id} 下載失敗：{e}")
+        return None
+
+
+def download_00990A_selenium():
+    """用 Selenium 載入元大頁面，點「展開」後刮全部持倉，存成 CSV"""
+    import time, csv
+    from bs4 import BeautifulSoup
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.chrome.options import Options
+
+    fund_id     = "00990A"
+    fund_folder = os.path.join(SAVE_FOLDER, fund_id)
+    os.makedirs(fund_folder, exist_ok=True)
+
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--ignore-certificate-errors")
+
+    driver = webdriver.Chrome(options=options)
+    try:
+        driver.get("https://www.yuantaetfs.com/product/detail/00990A/ratio")
+        wait = WebDriverWait(driver, 30)
+
+        # 等第一筆資料出現
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".tbody .tr")))
+
+        # 若「展開」按鈕存在且未展開，就點它
+        try:
+            more_btn = driver.find_element(By.CSS_SELECTOR, ".moreBtn")
+            if "on" not in more_btn.get_attribute("class"):
+                driver.execute_script("arguments[0].click();", more_btn)
+                time.sleep(1.5)
+        except Exception:
+            pass
+
+        # 取得日期
+        trandate = driver.find_element(By.CSS_SELECTOR, ".trandate")
+        dm = re.search(r"(\d{4})/(\d{2})/(\d{2})", trandate.text)
+        if not dm:
+            print(f"[錯誤] {fund_id} 找不到日期")
+            return None
+        data_date = f"{dm.group(1)}-{dm.group(2)}-{dm.group(3)}"
+
+        save_path = os.path.join(fund_folder, f"{fund_id}_{data_date}.csv")
+        if os.path.exists(save_path):
+            print(f"[跳過] {fund_id} 今日檔案已存在 → {os.path.basename(save_path)}")
+            return save_path
+
+        # 刮全部列
+        soup  = BeautifulSoup(driver.page_source, "html.parser")
+        tbody = soup.find("div", class_="tbody")
+        rows  = tbody.find_all("div", class_="tr") if tbody else []
+
+        with open(save_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["date", "ticker", "name", "shares", "weight"])
+            for tr in rows:
+                tds = tr.find_all("div", class_="td")
+                if len(tds) < 4:
+                    continue
+                ticker = tds[0].find_all("span")[-1].get_text(strip=True)
+                name   = tds[1].find_all("span")[-1].get_text(strip=True)
+                shares = tds[2].find_all("span")[-1].get_text(strip=True)
+                weight = tds[3].find_all("span")[-1].get_text(strip=True)
+                writer.writerow([data_date, ticker, name, shares, weight])
+
+        print(f"[成功] {fund_id} 下載完成 → {os.path.basename(save_path)}（{len(rows)} 筆）")
+        return save_path
+
+    except Exception as e:
+        print(f"[錯誤] {fund_id} Selenium 失敗：{e}")
+        return None
+    finally:
+        driver.quit()
+
+
 if __name__ == "__main__":
     import sys
-    target = sys.argv[1:] if len(sys.argv) > 1 else ["00988A", "00981A", "00992A", "00403A"]
+    target = sys.argv[1:] if len(sys.argv) > 1 else ["00988A", "00981A", "00992A", "00403A", "00991A", "00990A"]
 
     for fund in FUND_CONFIGS:
         if fund["name"] in target:
@@ -159,3 +282,9 @@ if __name__ == "__main__":
 
     if "00992A" in target:
         download_00992A_selenium()
+
+    if "00991A" in target:
+        download_00991A_http()
+
+    if "00990A" in target:
+        download_00990A_selenium()

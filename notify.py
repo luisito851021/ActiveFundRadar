@@ -24,10 +24,12 @@ DISCORD_CHANNELS = {
     "00981A": os.getenv("DISCORD_CHANNEL_00981A"),
     "00992A": os.getenv("DISCORD_CHANNEL_00992A"),
     "00403A": os.getenv("DISCORD_CHANNEL_00403A"),
+    "00991A": os.getenv("DISCORD_CHANNEL_00991A"),
+    "00990A": os.getenv("DISCORD_CHANNEL_00990A"),
 }
 
 # 只發 Discord、不發 Telegram 的基金
-DISCORD_ONLY_FUNDS = {"00992A"}
+DISCORD_ONLY_FUNDS = {"00992A", "00990A", "00991A"}
 
 def send_telegram(message: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -94,13 +96,17 @@ def get_flag(ticker: str) -> str:
         "HK": "🇭🇰",
         "FP": "🇫🇷",
         "LN": "🇬🇧",
+        "KP": "🇰🇷",
+        "GR": "🇩🇪",
     }.get(suffix, "🇹🇼")  # 純數字台股或其他預設台灣
 
 _MARKET_SUFFIX = {
     "US": "",
     "JP": ".T",
     "KS": ".KS",
+    "KP": ".KS",
     "GY": ".DE",
+    "GR": ".DE",
     "HK": ".HK",
     "FP": ".PA",
     "LN": ".L",
@@ -167,7 +173,7 @@ def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A", 
 
     # ── 00988A 批次抓取 Yahoo Finance 漲幅 ────────
     price_changes = {}
-    if fund_id == "00988A":
+    if fund_id in ("00988A", "00990A"):
         print("[yfinance] 抓取持股漲幅中...")
         price_changes = fetch_price_changes(df["ticker"].tolist())
 
@@ -189,7 +195,7 @@ def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A", 
         lines.append(f"{symbol} <b>{action}</b>")
         for _, row in subset.iterrows():
             # 00981A 台股用張（1張=1000股），00988A 用股
-            if fund_id in ("00981A", "00992A", "00403A"):
+            if fund_id in ("00981A", "00992A", "00403A", "00991A"):
                 unit       = "張"
                 shares_t   = int(row['shares_today']) // 1000
                 shares_y   = int(row['shares_yest'])  // 1000
@@ -200,7 +206,7 @@ def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A", 
                 shares_y   = int(row['shares_yest'])
                 delta_s    = int(row['delta_shares'])
 
-            flag   = get_flag(row['ticker']) if fund_id == "00988A" else ""
+            flag   = get_flag(row['ticker']) if fund_id in ("00988A", "00990A") else ""
             prefix = f"{flag} " if flag else ""
             pct_str = price_changes.get(row['ticker'], "")
             pct_part = f"  漲幅：{pct_str}\n" if pct_str else ""
@@ -227,7 +233,7 @@ def format_message(df: pd.DataFrame, target_date: str, fund_id: str = "00988A", 
     return "\n".join(lines)
 
 if __name__ == "__main__":
-    FUNDS = ["00988A", "00981A", "00992A", "00403A"]
+    FUNDS = ["00988A", "00981A", "00992A", "00403A", "00991A", "00990A"]
 
     if len(sys.argv) == 3:
         target_date = sys.argv[1]
