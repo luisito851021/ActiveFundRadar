@@ -26,3 +26,6 @@ env/
 .vscode/
 .idea/
 *.db
+
+# Claude Code 本機設定與 worktrees
+.claude/
