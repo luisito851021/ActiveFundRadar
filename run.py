@@ -209,6 +209,9 @@ if __name__ == "__main__":
         if inp is not None:
             fund_stats[fund_id]["tokens"] = (inp, out, total)
 
+    # 補分類新建倉標的（只處理尚未分類的，費用極低）
+    _run("classify.py", ["--push"])
+
     elapsed = int((datetime.now() - start).total_seconds())
     print(f"\n✅ 全部完成：{datetime.now().strftime('%H:%M:%S')}")
 
