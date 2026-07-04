@@ -3,9 +3,33 @@ import urllib3
 import glob
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+def _prev_trading_day(d):
+    """
+    回推到 d 之前最近一個交易日（跳過週末與國定假日）。
+    群益 00992A 頁面的日期選擇器標示「最新日期」，實際是 PCF 適用日（T+1），
+    成分股權重反映的是這個日期的前一個交易日收盤價，需回推校正。
+    """
+    year = d.year
+    holidays = set()
+    try:
+        resp = requests.get(
+            f"https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/{year}.json",
+            timeout=10, verify=False,
+        )
+        resp.raise_for_status()
+        holidays = {e["date"] for e in resp.json() if e["isHoliday"]}
+    except Exception as e:
+        print(f"[警告] 無法取得 {year} 年行事曆，僅以週末判斷交易日：{e}")
+
+    while True:
+        d -= timedelta(days=1)
+        if d.weekday() < 5 and d.strftime("%Y%m%d") not in holidays:
+            return d
 
 # ── 設定區 ────────────────────────────────────────
 SAVE_FOLDER = r"C:\ActiveFundRadar\Files"
@@ -106,8 +130,10 @@ def download_00992A_selenium():
         date_input = wait.until(EC.presence_of_element_located((By.ID, "condition-date")))
         wait.until(lambda d: date_input.get_attribute("value") not in (None, ""))
 
-        date_val = date_input.get_attribute("value")  # "2026/04/24"
-        date_str = date_val.replace("/", "-")          # "2026-04-24"
+        date_val    = date_input.get_attribute("value")  # "2026/04/24"（頁面標「最新日期」，實為 PCF 適用日 T+1）
+        picker_date = datetime.strptime(date_val, "%Y/%m/%d")
+        data_date   = _prev_trading_day(picker_date)     # 回推到權重實際反映的收盤交易日
+        date_str    = data_date.strftime("%Y-%m-%d")
 
         save_path = os.path.join(fund_folder, f"{fund_id}_{date_str}.xlsx")
         if os.path.exists(save_path):
