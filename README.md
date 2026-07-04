@@ -10,15 +10,20 @@
 |---|---|---|
 | 00988A | 統一全球創新 | Telegram + Discord |
 | 00981A | 統一台股增長 | Telegram + Discord |
+| 00403A | 統一台股升級50 | Telegram + Discord |
 | 00992A | 群益台灣科技創新 | Discord 限定 |
+| 00991A | 復華未來50 | Discord 限定 |
+| 00990A | 元大全球AI | Discord 限定 |
 
 ## 功能
 
 - 每日自動下載持倉 xlsx 並寫入 SQLite 資料庫（同步備份至 Supabase）
 - 比對前後兩日持倉，偵測建倉／清倉／加碼／減碼
-- 透過 Telegram Bot 推送異動明細（00988A、00981A）
-- 透過 Discord Bot 推送異動明細（各基金對應獨立頻道）
+- 透過 Telegram / Discord Bot 推送異動明細（各基金對應獨立頻道）
 - 呼叫 Claude API 分析經理人選股邏輯，同步發送至 Telegram 與 Discord
+- 持倉標的產業分類（Claude API，`ticker_categories` 表），每日自動補分類新建倉標的
+- 跨基金共振訊號偵測（當日被多檔基金同時異動的標的）
+- 每次執行後發送執行報告到 Discord 系統頻道
 
 ## 專案結構
 
@@ -30,6 +35,9 @@ ActiveFundRadar/
 ├── diff.py           # 比對持倉差異
 ├── notify.py         # 格式化並發送 Telegram / Discord 通知
 ├── analyze.py        # 呼叫 Claude API 進行選股分析並推送
+├── classify.py       # 持倉標的產業分類（Claude API）
+├── cross_fund.py     # 跨基金共振訊號偵測（獨立排程）
+├── discord_log.py    # 執行報告發送到 Discord 系統頻道
 ├── db_utils.py       # SQLite + Supabase 雙寫工具
 ├── init_db.py        # 初始化 SQLite 資料庫
 ├── requirements.txt
@@ -56,9 +64,9 @@ TELEGRAM_TOKEN=你的_Telegram_Bot_Token
 TELEGRAM_CHAT_ID=你的_Chat_ID
 
 DISCORD_BOT_TOKEN=你的_Discord_Bot_Token
-DISCORD_CHANNEL_00988A=00988A_對應的頻道_ID
-DISCORD_CHANNEL_00981A=00981A_對應的頻道_ID
-DISCORD_CHANNEL_00992A=00992A_對應的頻道_ID
+DISCORD_CHANNEL_00988A=各基金對應的頻道_ID（00981A/00992A/00403A/00991A/00990A 同理）
+DISCORD_CHANNEL_CROSS_FUND=共振訊號頻道_ID
+DISCORD_SYSLOG_CHANNEL=執行報告頻道_ID
 
 SUPABASE_URL=postgresql://...
 SQLITE_PATH=C:\ActiveFundRadar\etf.db
@@ -109,7 +117,7 @@ python analyze.py 2026-04-01 00988A       # AI 分析
 ## 注意事項
 
 - `.env`、`etf.db`、`Files/` 資料夾均不進版本控制
-- 00988A 為全球股票（持股單位：股）；00981A、00992A 為台灣股票（持股單位：張，1張=1000股）
-- 00992A 使用 Selenium + ChromeDriver 下載，chromedriver.exe 需手動放置於專案根目錄
+- 00988A、00990A 為全球股票（持股單位：股）；00981A、00403A、00992A、00991A 為台灣股票（持股單位：張，1張=1000股）
+- 00992A、00990A 使用 Selenium + ChromeDriver 下載，chromedriver.exe 需手動放置於專案根目錄
 - Claude API Token 消耗量會於每次分析後印出至 console
 - 網頁查詢介面請使用 [ezMoneySniper](https://github.com/luisito851021/ezMoneySniper)
