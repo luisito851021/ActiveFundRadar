@@ -72,6 +72,29 @@ def send_discord(message: str, fund_id: str):
         else:
             print(f"[Discord] 發送失敗：{resp.text}")
 
+def already_sent(conn, fund_id: str, target_date: str, kind: str = "analyze") -> bool:
+    """檢查該基金該日期是否已經發送過通知，避免來源網站卡住不更新時重複呼叫 Claude API 並重發"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS notify_log (
+            fund_id TEXT NOT NULL,
+            date    TEXT NOT NULL,
+            kind    TEXT NOT NULL,
+            PRIMARY KEY (fund_id, date, kind)
+        )
+    """)
+    row = conn.execute(
+        "SELECT COUNT(*) FROM notify_log WHERE fund_id=? AND date=? AND kind=?",
+        (fund_id, target_date, kind),
+    ).fetchone()
+    return row[0] > 0
+
+def mark_sent(conn, fund_id: str, target_date: str, kind: str = "analyze"):
+    conn.execute(
+        "INSERT OR IGNORE INTO notify_log (fund_id, date, kind) VALUES (?, ?, ?)",
+        (fund_id, target_date, kind),
+    )
+    conn.commit()
+
 # ── 找該基金在 daily_changes 裡 ≤ target_date 的最新日期 ──
 def get_latest_change_date(conn, fund_id: str, target_date: str):
     result = pd.read_sql(f"""
@@ -174,13 +197,13 @@ def call_claude(prompt: str, fund_id: str) -> str:
     response = client.messages.create(
         model="claude-sonnet-5",
         max_tokens=1024,
-        temperature=0.3,
         system=system,
         messages=[{"role": "user", "content": prompt}],
     )
     usage = response.usage
     print(f"  [Token] input={usage.input_tokens}  output={usage.output_tokens}  total={usage.input_tokens + usage.output_tokens}")
-    return response.content[0].text
+    # Sonnet 5 回傳時第一個 block 可能是 ThinkingBlock，需找第一個有 .text 的 block
+    return next((b.text for b in response.content if hasattr(b, "text")), "").strip()
 
 # ── 組成訊息 ──────────────────────────────────────
 def format_analysis_message(analysis: str, target_date: str, fund_id: str) -> str:
@@ -223,6 +246,10 @@ if __name__ == "__main__":
 
         print(f"分析：{fund_id}  日期：{actual_date}")
 
+        if already_sent(conn, fund_id, actual_date, "analyze"):
+            print(f"[跳過] {fund_id} {actual_date} 已經發送過分析，不重複發送")
+            continue
+
         df = get_daily_changes(conn, actual_date, fund_id)
 
         if df.empty:
@@ -244,6 +271,7 @@ if __name__ == "__main__":
         if fund_id not in DISCORD_ONLY_FUNDS:
             send_telegram(message)
         send_discord(message, fund_id)
+        mark_sent(conn, fund_id, actual_date, "analyze")
 
     conn.close()
     print(f"\n✅ 分析完成")

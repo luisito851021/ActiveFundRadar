@@ -60,6 +60,29 @@ def send_discord(message: str, fund_id: str):
         else:
             print(f"[Discord] 發送失敗：{resp.text}")
 
+def already_sent(conn, fund_id: str, target_date: str, kind: str = "notify") -> bool:
+    """檢查該基金該日期是否已經發送過通知，避免來源網站卡住不更新時重複發送舊資料"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS notify_log (
+            fund_id TEXT NOT NULL,
+            date    TEXT NOT NULL,
+            kind    TEXT NOT NULL,
+            PRIMARY KEY (fund_id, date, kind)
+        )
+    """)
+    row = conn.execute(
+        "SELECT COUNT(*) FROM notify_log WHERE fund_id=? AND date=? AND kind=?",
+        (fund_id, target_date, kind),
+    ).fetchone()
+    return row[0] > 0
+
+def mark_sent(conn, fund_id: str, target_date: str, kind: str = "notify"):
+    conn.execute(
+        "INSERT OR IGNORE INTO notify_log (fund_id, date, kind) VALUES (?, ?, ?)",
+        (fund_id, target_date, kind),
+    )
+    conn.commit()
+
 def get_holdings_count(conn, target_date: str, fund_id: str) -> int:
     """取得 holdings 表中 ≤ target_date 的最新日期持倉總數"""
     result = pd.read_sql(f"""
@@ -246,11 +269,16 @@ if __name__ == "__main__":
     conn = sqlite3.connect("etf.db")
 
     for fund_id in FUNDS:
+        if already_sent(conn, fund_id, target_date, "notify"):
+            print(f"[跳過] {fund_id} {target_date} 已經發送過通知，不重複發送")
+            continue
+
         df = get_daily_changes(conn, target_date, fund_id)
         message = format_message(df, target_date, fund_id, conn=conn)
         print(message)
         if fund_id not in DISCORD_ONLY_FUNDS:
             send_telegram(message)
         send_discord(message, fund_id)
+        mark_sent(conn, fund_id, target_date, "notify")
 
     conn.close()
