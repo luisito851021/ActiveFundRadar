@@ -248,14 +248,14 @@ def download_00990A_selenium():
         # 等第一筆資料出現
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".tbody .tr")))
 
-        # 若「展開」按鈕存在且未展開，就點它
-        try:
-            more_btn = driver.find_element(By.CSS_SELECTOR, ".moreBtn")
-            if "on" not in more_btn.get_attribute("class"):
-                driver.execute_script("arguments[0].click();", more_btn)
-                time.sleep(1.5)
-        except Exception:
-            pass
+        # 頁面上「持股列表」與「投資區域」各自有一顆「展開」按鈕，兩個都要點才能拿到完整列表
+        for more_btn in driver.find_elements(By.CSS_SELECTOR, ".moreBtn"):
+            try:
+                if "on" not in more_btn.get_attribute("class"):
+                    driver.execute_script("arguments[0].click();", more_btn)
+            except Exception:
+                pass
+        time.sleep(1.5)
 
         # 取得日期
         trandate = driver.find_element(By.CSS_SELECTOR, ".trandate")
@@ -270,10 +270,10 @@ def download_00990A_selenium():
             print(f"[跳過] {fund_id} 今日檔案已存在 → {os.path.basename(save_path)}")
             return save_path
 
-        # 刮全部列
-        soup  = BeautifulSoup(driver.page_source, "html.parser")
-        tbody = soup.find("div", class_="tbody")
-        rows  = tbody.find_all("div", class_="tr") if tbody else []
+        # 刮全部列。頁面上第 1 個 .tbody 是持股列表，第 2 個是投資區域比例表
+        soup    = BeautifulSoup(driver.page_source, "html.parser")
+        tbodies = soup.find_all("div", class_="tbody")
+        rows    = tbodies[0].find_all("div", class_="tr") if len(tbodies) > 0 else []
 
         with open(save_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -289,6 +289,26 @@ def download_00990A_selenium():
                 writer.writerow([data_date, ticker, name, shares, weight])
 
         print(f"[成功] {fund_id} 下載完成 → {os.path.basename(save_path)}（{len(rows)} 筆）")
+
+        # 投資區域比例表（名稱／比例／檔數），供 region.py 解析寫入 region_ratios
+        region_rows = tbodies[1].find_all("div", class_="tr") if len(tbodies) > 1 else []
+        if region_rows:
+            region_path = os.path.join(fund_folder, f"{fund_id}_region_{data_date}.csv")
+            with open(region_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["date", "region", "ratio", "count"])
+                for tr in region_rows:
+                    tds = tr.find_all("div", class_="td")
+                    if len(tds) < 3:
+                        continue
+                    region = tds[0].find_all("span")[-1].get_text(strip=True)
+                    ratio  = tds[1].find_all("span")[-1].get_text(strip=True)
+                    count  = tds[2].find_all("span")[-1].get_text(strip=True)
+                    writer.writerow([data_date, region, ratio, count])
+            print(f"[成功] {fund_id} 投資區域下載完成 → {os.path.basename(region_path)}（{len(region_rows)} 筆）")
+        else:
+            print(f"[警告] {fund_id} 找不到投資區域表格，略過")
+
         return save_path
 
     except Exception as e:

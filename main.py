@@ -5,6 +5,7 @@ import glob
 import os
 from datetime import date
 from db_utils import sync_to_supabase
+import region
 
 FUND_CONFIGS = [
     {"file_pattern": "ETF_Investment_Portfolio_*.xlsx", "fund_id": "00988A"},
@@ -181,10 +182,17 @@ if __name__ == "__main__":
         print(holdings)
         save_to_db(holdings)
 
+        # 00988A 官網無投資區域資料，依持股代號後綴推算近似比例
+        if fund["fund_id"] == "00988A":
+            conn = sqlite3.connect("etf.db")
+            region_df = region.compute_region_from_holdings(conn, "00988A", holdings["date"].iloc[0])
+            conn.close()
+            region.save_region(region_df)
+
     # 00990A 元大（Selenium 刮 HTML → CSV）
     if "00990A" in target:
         folder_990 = os.path.join(base_folder, "00990A")
-        files_990  = glob.glob(os.path.join(folder_990, "00990A_*.csv"))
+        files_990  = glob.glob(os.path.join(folder_990, "00990A_[0-9]*.csv"))
         if not files_990:
             print("[跳過] 00990A 找不到任何 csv 檔案")
         else:
@@ -193,6 +201,15 @@ if __name__ == "__main__":
             holdings = parse_00990A_csv(csv_path)
             print(holdings)
             save_to_db(holdings)
+
+        # 投資區域比例（官網爬蟲產生，找不到就跳過，不中斷流程）
+        region_files = glob.glob(os.path.join(folder_990, "00990A_region_*.csv"))
+        if not region_files:
+            print("[警告] 00990A 找不到投資區域 csv 檔案，略過")
+        else:
+            region_path = sorted(region_files)[-1]
+            print(f"[00990A] 使用區域檔案：{os.path.basename(region_path)}")
+            region.save_region(region.parse_00990A_region_csv(region_path))
 
     # 00991A 復華（獨立格式）
     if "00991A" in target:
