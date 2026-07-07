@@ -175,7 +175,11 @@ def download_00992A_selenium():
 
 
 def download_00991A_http():
-    """從復華官網抓最新日期，下載 00991A 持倉 xlsx"""
+    """
+    下載 00991A 持倉 xlsx。
+    直接對 API 逐日探測（今天往回推），不再爬頁面上的下載連結日期——
+    該連結的日期是頁面 datepicker 的預設值，會卡住不動，跟實際可下載的最新資料日期脫節。
+    """
     fund_id = "00991A"
     fund_folder = os.path.join(SAVE_FOLDER, fund_id)
     os.makedirs(fund_folder, exist_ok=True)
@@ -184,40 +188,37 @@ def download_00991A_http():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
     }
 
-    # Step 1：抓頁面取得最新日期（格式 /api/assetsExcel/ETF23/YYYYMMDD）
-    try:
-        resp = requests.get(
-            "https://www.fhtrust.com.tw/ETF/etf_detail/ETF23",
-            headers=headers, timeout=30,
-        )
-        resp.raise_for_status()
-        m = re.search(r"/api/assetsExcel/ETF23/(\d{8})", resp.text)
-        if not m:
-            print(f"[錯誤] {fund_id} 找不到最新日期")
-            return None
-        date_raw = m.group(1)                                      # "20260625"
-        date_str = f"{date_raw[:4]}-{date_raw[4:6]}-{date_raw[6:]}"  # "2026-06-25"
-    except Exception as e:
-        print(f"[錯誤] {fund_id} 取得日期失敗：{e}")
-        return None
+    existing_dates = {
+        os.path.basename(f)[len(fund_id) + 1:-5]
+        for f in glob.glob(os.path.join(fund_folder, f"{fund_id}_*.xlsx"))
+    }
 
-    save_path = os.path.join(fund_folder, f"{fund_id}_{date_str}.xlsx")
-    if os.path.exists(save_path):
-        print(f"[跳過] {fund_id} 今日檔案已存在 → {os.path.basename(save_path)}")
-        return save_path
+    saved_paths = []
+    d = datetime.now().date()
+    for _ in range(10):
+        date_str = d.strftime("%Y-%m-%d")
+        if date_str in existing_dates:
+            break  # 已碰到抓過的日期，更早的應該也都抓過了
 
-    # Step 2：下載 xlsx
-    api_url = f"https://www.fhtrust.com.tw/api/assetsExcel/ETF23/{date_raw}"
-    try:
-        resp = requests.get(api_url, headers=headers, timeout=30)
-        resp.raise_for_status()
-        with open(save_path, "wb") as f:
-            f.write(resp.content)
-        print(f"[成功] {fund_id} 下載完成 → {os.path.basename(save_path)}")
-        return save_path
-    except Exception as e:
-        print(f"[錯誤] {fund_id} 下載失敗：{e}")
+        api_url = f"https://www.fhtrust.com.tw/api/assetsExcel/ETF23/{d.strftime('%Y%m%d')}"
+        try:
+            resp = requests.get(api_url, headers=headers, timeout=30)
+            resp.raise_for_status()
+            if "excel" in resp.headers.get("Content-Type", ""):
+                save_path = os.path.join(fund_folder, f"{fund_id}_{date_str}.xlsx")
+                with open(save_path, "wb") as f:
+                    f.write(resp.content)
+                saved_paths.append(save_path)
+                print(f"[成功] {fund_id} 下載完成 → {os.path.basename(save_path)}")
+        except Exception as e:
+            print(f"[錯誤] {fund_id} {date_str} 下載失敗：{e}")
+
+        d -= timedelta(days=1)
+
+    if not saved_paths:
+        print(f"[跳過] {fund_id} 沒有新資料")
         return None
+    return sorted(saved_paths)[-1]
 
 
 def download_00990A_selenium():
