@@ -48,44 +48,44 @@ TW_FUNDS = {"00981A", "00992A", "00403A", "00991A"}
 ALL_FUNDS = ["00988A", "00981A", "00992A", "00403A", "00991A", "00990A"]
 
 
-def get_active_dates(conn) -> list[str]:
-    """
-    取得「每檔基金各自最新日期」的聯集，去重後排序。
-    全球 ETF (00988A/00990A) 日期比台股 ETF 少一天，
-    這樣兩個日期都能被查到，不會漏掉跨基金訊號。
-    """
-    placeholders = ",".join(f"'{f}'" for f in ALL_FUNDS)
-    rows = conn.execute(f"""
-        SELECT DISTINCT date FROM (
-            SELECT MAX(date) AS date
-            FROM daily_changes
-            WHERE fund_id IN ({placeholders})
-            GROUP BY fund_id
+def ensure_log_table(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS cross_fund_log (
+            date TEXT PRIMARY KEY
         )
-        WHERE date IS NOT NULL
-        ORDER BY date DESC
+    """)
+    conn.commit()
+
+
+def mark_processed(conn, target_date: str):
+    conn.execute("INSERT OR IGNORE INTO cross_fund_log (date) VALUES (?)", (target_date,))
+    conn.commit()
+
+
+def get_unprocessed_dates(conn) -> list[str]:
+    """
+    取得 daily_changes 裡尚未比對過共振的日期（近 30 天內），由舊到新排序。
+    用明確的 log 表記錄「已處理」，取代舊版「只挑 MAX(date) 的基金」邏輯——
+    後者假設各基金的最新日期會同步前進，但基金之間回報時間本來就會錯開
+    （全球型基金固定慢一天、或某檔臨時補資料），只看 MAX(date) 會讓還沒
+    比對過的舊日期資料被誤判為「已經是舊資料」而永遠漏比對。
+    """
+    ensure_log_table(conn)
+    rows = conn.execute("""
+        SELECT DISTINCT date FROM daily_changes
+        WHERE date >= date('now', '-30 days')
+          AND date NOT IN (SELECT date FROM cross_fund_log)
+        ORDER BY date ASC
     """).fetchall()
     return [r[0] for r in rows]
 
 
 def get_cross_fund_signals(conn, target_date: str) -> pd.DataFrame:
-    """
-    找出當日被超過 1 檔基金異動的標的。
-    只納入「以 target_date 為最新資料日期」的基金，
-    避免跨日重複回報已發送過的訊號。
-    """
+    """找出當日（不分基金是否為最新日期）被超過 1 檔基金異動的標的"""
     return pd.read_sql(f"""
-        WITH active_funds AS (
-            -- 只取「最新日期 = target_date」的基金
-            SELECT fund_id FROM daily_changes
-            GROUP BY fund_id
-            HAVING MAX(date) = '{target_date}'
-        ),
-        multi_fund_tickers AS (
-            -- 在 active_funds 中，當日被超過 1 檔基金異動的 ticker
+        WITH multi_fund_tickers AS (
             SELECT ticker FROM daily_changes
             WHERE date = '{target_date}'
-              AND fund_id IN (SELECT fund_id FROM active_funds)
             GROUP BY ticker
             HAVING COUNT(DISTINCT fund_id) > 1
         )
@@ -102,7 +102,6 @@ def get_cross_fund_signals(conn, target_date: str) -> pd.DataFrame:
             ROUND(dc.delta        * 100, 2) AS delta_w
         FROM daily_changes dc
         WHERE dc.date = '{target_date}'
-          AND dc.fund_id IN (SELECT fund_id FROM active_funds)
           AND dc.ticker IN (SELECT ticker FROM multi_fund_tickers)
         ORDER BY
             (SELECT COUNT(DISTINCT fund_id) FROM daily_changes
@@ -200,25 +199,29 @@ def send_discord(message: str) -> bool:
 
 if __name__ == "__main__":
     conn = sqlite3.connect(DB_PATH)
+    ensure_log_table(conn)
 
-    if len(sys.argv) > 1:
+    manual = len(sys.argv) > 1
+    if manual:
         dates_to_check = [sys.argv[1]]
     else:
-        dates_to_check = get_active_dates(conn)
+        dates_to_check = get_unprocessed_dates(conn)
         if not dates_to_check:
-            print("[cross_fund] 資料庫無資料，結束")
+            print("[cross_fund] 沒有新日期需要比對，結束")
             conn.close()
             sys.exit(0)
-        print(f"[cross_fund] 自動偵測日期：{dates_to_check}")
+        print(f"[cross_fund] 自動偵測未處理日期：{dates_to_check}")
 
     # 各日期獨立查詢後合併為一則訊息
-    # display_date 用最新日期（台股）作為標題
-    display_date = dates_to_check[0]
+    # display_date 用最新日期作為標題（dates_to_check 由舊到新排序）
+    display_date = dates_to_check[-1]
     frames = []
     for target_date in dates_to_check:
         df = get_cross_fund_signals(conn, target_date)
         if not df.empty:
             frames.append(df)
+        if not manual:
+            mark_processed(conn, target_date)
 
     conn.close()
 
