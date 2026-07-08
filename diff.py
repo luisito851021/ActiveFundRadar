@@ -2,7 +2,33 @@ import sqlite3
 import pandas as pd
 from datetime import date, timedelta
 import sys
-from db_utils import sync_to_supabase
+from db_utils import sync_to_supabase, _get_engine
+
+
+def ensure_created_at_column(conn):
+    """
+    確保 daily_changes 有 created_at 欄位（實際寫入當下的日曆日，非資料的交易日期）。
+    跨基金共振比對要看「同一批排程寫入的資料」，不能只看 date 欄位——
+    各基金回報的交易日本來就會錯開（全球型基金固定慢一天、或某檔臨時補資料），
+    用 date 互相比對容易把同一天寫入、但交易日標示不同的異動誤判成不相關而漏掉。
+    """
+    try:
+        conn.execute("ALTER TABLE daily_changes ADD COLUMN created_at TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # 欄位已存在
+
+    engine = _get_engine()
+    if engine is None:
+        return
+    from sqlalchemy import text
+    try:
+        with engine.begin() as pg:
+            pg.execute(text("ALTER TABLE daily_changes ADD COLUMN IF NOT EXISTS created_at TEXT"))
+    except Exception as e:
+        print(f"[Supabase] daily_changes 加欄位失敗：{e}")
+    finally:
+        engine.dispose()
 
 def get_holdings(conn, date_str, fund_id="00988A"):
     return pd.read_sql(
@@ -67,13 +93,15 @@ def save_changes(conn, diff_df, today_date, yesterday_date, fund_id="00988A"):
         print("無異動")
         return
 
+    ensure_created_at_column(conn)
+
     # 防止重複寫入同一天
     existing = pd.read_sql(
     f"SELECT COUNT(*) as cnt FROM daily_changes WHERE date='{today_date}' AND fund_id='{fund_id}'",
     conn
     ).iloc[0]["cnt"]
 
-    print(f"[DEBUG] existing = {existing}, type = {type(existing)}") 
+    print(f"[DEBUG] existing = {existing}, type = {type(existing)}")
 
     if existing > 0:
         print(f"[跳過] {fund_id} {today_date} 異動資料已存在，不重複寫入")
@@ -91,6 +119,7 @@ def save_changes(conn, diff_df, today_date, yesterday_date, fund_id="00988A"):
     "weight_today": diff_df["weight"],
     "weight_yest":  diff_df["weight_yest"],
     "delta":        diff_df["delta"],
+    "created_at":   date.today().strftime("%Y-%m-%d"),
     })
 
     save_df.to_sql("daily_changes", conn, if_exists="append", index=False)

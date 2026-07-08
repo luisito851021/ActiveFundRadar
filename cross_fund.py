@@ -1,10 +1,12 @@
 """
 cross_fund.py — 跨基金共振訊號偵測
-找出當日被超過 1 檔基金同時異動的標的，發送到 Discord 共振頻道。
+找出「同一天寫入」（daily_changes.created_at）被超過 1 檔基金同時異動的標的，
+發送到 Discord 共振頻道。用寫入日期而非交易日期分組，
+避免各基金交易日回報時間錯開導致漏比對。
 
 用法：
-    python cross_fund.py              # 自動抓最新有資料的日期
-    python cross_fund.py 2026-07-04   # 指定日期
+    python cross_fund.py              # 自動抓尚未處理過的寫入日期
+    python cross_fund.py 2026-07-04   # 指定寫入日期
 """
 
 import sqlite3
@@ -57,35 +59,36 @@ def ensure_log_table(conn):
     conn.commit()
 
 
-def mark_processed(conn, target_date: str):
-    conn.execute("INSERT OR IGNORE INTO cross_fund_log (date) VALUES (?)", (target_date,))
+def mark_processed(conn, write_date: str):
+    conn.execute("INSERT OR IGNORE INTO cross_fund_log (date) VALUES (?)", (write_date,))
     conn.commit()
 
 
-def get_unprocessed_dates(conn) -> list[str]:
+def get_unprocessed_write_dates(conn) -> list[str]:
     """
-    取得 daily_changes 裡尚未比對過共振的日期（近 30 天內），由舊到新排序。
-    用明確的 log 表記錄「已處理」，取代舊版「只挑 MAX(date) 的基金」邏輯——
-    後者假設各基金的最新日期會同步前進，但基金之間回報時間本來就會錯開
-    （全球型基金固定慢一天、或某檔臨時補資料），只看 MAX(date) 會讓還沒
-    比對過的舊日期資料被誤判為「已經是舊資料」而永遠漏比對。
+    取得尚未比對過共振的「寫入日期」（daily_changes.created_at，近 30 天內），由舊到新排序。
+    改用寫入日期分組，取代舊版「用 date（交易日）互相比對」邏輯——
+    各基金回報的交易日本來就會錯開（全球型基金固定慢一天、或某檔臨時補資料），
+    用 date 互相比對容易漏掉「同一天寫入、但交易日標示不同」的異動。
+    寫入日期才是真正代表「這批是同一次排程結果」的欄位。
     """
     ensure_log_table(conn)
     rows = conn.execute("""
-        SELECT DISTINCT date FROM daily_changes
-        WHERE date >= date('now', '-30 days')
-          AND date NOT IN (SELECT date FROM cross_fund_log)
-        ORDER BY date ASC
+        SELECT DISTINCT created_at FROM daily_changes
+        WHERE created_at IS NOT NULL
+          AND created_at >= date('now', '-30 days')
+          AND created_at NOT IN (SELECT date FROM cross_fund_log)
+        ORDER BY created_at ASC
     """).fetchall()
     return [r[0] for r in rows]
 
 
-def get_cross_fund_signals(conn, target_date: str) -> pd.DataFrame:
-    """找出當日（不分基金是否為最新日期）被超過 1 檔基金異動的標的"""
+def get_cross_fund_signals(conn, write_date: str) -> pd.DataFrame:
+    """找出同一寫入日期（created_at）裡，被超過 1 檔基金異動的標的（不分各基金交易日是否一致）"""
     return pd.read_sql(f"""
         WITH multi_fund_tickers AS (
             SELECT ticker FROM daily_changes
-            WHERE date = '{target_date}'
+            WHERE created_at = '{write_date}'
             GROUP BY ticker
             HAVING COUNT(DISTINCT fund_id) > 1
         )
@@ -101,11 +104,11 @@ def get_cross_fund_signals(conn, target_date: str) -> pd.DataFrame:
             ROUND(dc.weight_yest  * 100, 2) AS weight_yest,
             ROUND(dc.delta        * 100, 2) AS delta_w
         FROM daily_changes dc
-        WHERE dc.date = '{target_date}'
+        WHERE dc.created_at = '{write_date}'
           AND dc.ticker IN (SELECT ticker FROM multi_fund_tickers)
         ORDER BY
             (SELECT COUNT(DISTINCT fund_id) FROM daily_changes
-             WHERE date = '{target_date}' AND ticker = dc.ticker) DESC,
+             WHERE created_at = '{write_date}' AND ticker = dc.ticker) DESC,
             dc.ticker,
             dc.fund_id
     """, conn)
@@ -203,25 +206,25 @@ if __name__ == "__main__":
 
     manual = len(sys.argv) > 1
     if manual:
-        dates_to_check = [sys.argv[1]]
+        write_dates = [sys.argv[1]]
     else:
-        dates_to_check = get_unprocessed_dates(conn)
-        if not dates_to_check:
-            print("[cross_fund] 沒有新日期需要比對，結束")
+        write_dates = get_unprocessed_write_dates(conn)
+        if not write_dates:
+            print("[cross_fund] 沒有新的寫入日期需要比對，結束")
             conn.close()
             sys.exit(0)
-        print(f"[cross_fund] 自動偵測未處理日期：{dates_to_check}")
+        print(f"[cross_fund] 自動偵測未處理的寫入日期：{write_dates}")
 
-    # 各日期獨立查詢後合併為一則訊息
-    # display_date 用最新日期作為標題（dates_to_check 由舊到新排序）
-    display_date = dates_to_check[-1]
+    # 各寫入日期獨立查詢後合併為一則訊息
+    # display_date 用最新寫入日期作為標題（write_dates 由舊到新排序）
+    display_date = write_dates[-1]
     frames = []
-    for target_date in dates_to_check:
-        df = get_cross_fund_signals(conn, target_date)
+    for write_date in write_dates:
+        df = get_cross_fund_signals(conn, write_date)
         if not df.empty:
             frames.append(df)
         if not manual:
-            mark_processed(conn, target_date)
+            mark_processed(conn, write_date)
 
     conn.close()
 
