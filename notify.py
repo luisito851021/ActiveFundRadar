@@ -121,6 +121,8 @@ def get_flag(ticker: str) -> str:
         "LN": "🇬🇧",
         "KP": "🇰🇷",
         "GR": "🇩🇪",
+        "CH": "🇨🇳",   # 中國 A 股（上海/深圳）
+        "NA": "🇳🇱",   # 荷蘭（阿姆斯特丹）
     }.get(suffix, "🇹🇼")  # 純數字台股或其他預設台灣
 
 _MARKET_SUFFIX = {
@@ -133,6 +135,7 @@ _MARKET_SUFFIX = {
     "HK": ".HK",
     "FP": ".PA",
     "LN": ".L",
+    "NA": ".AS",   # 荷蘭阿姆斯特丹
     "TW": ".TW",
 }
 
@@ -142,6 +145,8 @@ def to_yahoo_ticker(bloomberg_ticker: str) -> str:
     suffix = parts[1].upper() if len(parts) > 1 else ""
     if not suffix and base.isdigit():
         return base + ".TW"
+    if suffix == "CH":  # 中國 A 股：6 開頭滬市 .SS，其餘（0/3）深市 .SZ
+        return base + (".SS" if base.startswith("6") else ".SZ")
     return base + _MARKET_SUFFIX.get(suffix, "")
 
 def fetch_price_changes(bloomberg_tickers: list) -> dict:
