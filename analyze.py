@@ -36,6 +36,9 @@ FUND_NAMES = {
 
 DISCORD_ONLY_FUNDS = {"00992A", "00990A", "00991A"}
 
+# 多空並陳（合併解讀 + 精簡多空，各一句）：6 檔全套用
+BULL_BEAR_FUNDS = {"00988A", "00981A", "00992A", "00403A", "00991A", "00990A"}
+
 # ── Telegram 發送 ─────────────────────────────────
 def send_telegram(message: str):
     url  = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -144,16 +147,30 @@ def build_prompt(df: pd.DataFrame, target_date: str, fund_id: str) -> str:
 
     prompt_data = "\n".join(lines)
 
+    if fund_id in BULL_BEAR_FUNDS:
+        sections = [
+            "1. 📌 調倉重點與邏輯\n"
+            "   用 3～4 句綜合說明本次異動涉及哪些產業、整體配置方向的轉變，"
+            "以及你推測經理人背後的投資思路（what 與 why 合併闡述，不要逐筆重述原始數據）。",
+            "2. ⚖️ 多空視角（各限一句話）\n"
+            "   🐂 偏多：一句話說明這次調倉看多的理由。\n"
+            "   🐻 偏空：一句話說明同一批異動可能反映的疑慮或風險。",
+        ]
+        instruction = "請以條列式撰寫，第 1 點 3～4 句、第 2 點多空各一句，語氣專業但易讀。不需要重複列出原始數據。"
+    else:
+        sections = [
+            "1. 📌 產業佈局變化\n   說明本次異動涉及哪些產業，整體配置方向有何轉變。",
+            "2. 💡 可能的選股邏輯\n   推測經理人此次調倉背後的投資思路，例如追蹤特定產業趨勢、規避風險、或因應總體經濟變化。",
+        ]
+        instruction = "請以條列式撰寫，每點 2～3 句，語氣專業但易讀。不需要重複列出原始數據。"
+    body = "\n\n".join(sections)
+
     return f"""{prompt_data}
-請根據以上異動，從兩個角度提供繁體中文分析摘要：
+請根據以上異動，提供繁體中文分析摘要：
 
-1. 📌 產業佈局變化
-   說明本次異動涉及哪些產業，整體配置方向有何轉變。
+{body}
 
-2. 💡 可能的選股邏輯
-   推測經理人此次調倉背後的投資思路，例如追蹤特定產業趨勢、規避風險、或因應總體經濟變化。
-
-請以條列式撰寫，每點 2～3 句，語氣專業但易讀。不需要重複列出原始數據。"""
+{instruction}"""
 
 # ── 呼叫 Claude API ───────────────────────────────
 def call_claude(prompt: str, fund_id: str) -> str:
@@ -193,6 +210,9 @@ def call_claude(prompt: str, fund_id: str) -> str:
     }
 
     system = system_map.get(fund_id, system_map["00981A"])
+
+    if fund_id in BULL_BEAR_FUNDS:
+        system += "分析請保持中立，多空兩面都要給出有依據的觀點，僅供研究參考，不構成買賣建議。"
 
     response = client.messages.create(
         model="claude-sonnet-5",
