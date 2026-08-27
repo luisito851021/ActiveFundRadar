@@ -14,6 +14,8 @@
 | 00992A | 群益台灣科技創新 | Discord 限定 |
 | 00991A | 復華未來50 | Discord 限定 |
 | 00990A | 元大全球AI | Discord 限定 |
+| 00411A | 統一前沿科技 | Telegram + Discord |
+| 00987D | 統一美債量化 | Telegram + Discord |
 
 ## 功能
 
@@ -64,7 +66,7 @@ TELEGRAM_TOKEN=你的_Telegram_Bot_Token
 TELEGRAM_CHAT_ID=你的_Chat_ID
 
 DISCORD_BOT_TOKEN=你的_Discord_Bot_Token
-DISCORD_CHANNEL_00988A=各基金對應的頻道_ID（00981A/00992A/00403A/00991A/00990A 同理）
+DISCORD_CHANNEL_00988A=各基金對應的頻道_ID（00981A/00992A/00403A/00991A/00990A/00411A/00987D 同理）
 DISCORD_CHANNEL_CROSS_FUND=共振訊號頻道_ID
 DISCORD_SYSLOG_CHANNEL=執行報告頻道_ID
 
@@ -117,7 +119,8 @@ python analyze.py 2026-04-01 00988A       # AI 分析
 ## 注意事項
 
 - `.env`、`etf.db`、`Files/` 資料夾均不進版本控制
-- 00988A、00990A 為全球股票（持股單位：股）；00981A、00403A、00992A、00991A 為台灣股票（持股單位：張，1張=1000股）
+- 00988A、00990A、00411A 為全球股票（持股單位：股）；00981A、00403A、00992A、00991A 為台灣股票（持股單位：張，1張=1000股）
+- 00987D 為債券型（美債量化），持倉分成債券（記面額）與美債期貨（記口數），兩者都寫進 `holdings`，期貨 ticker 帶契約年月（如 `UB 2026/12`）
 - 00992A、00990A 使用 Selenium + ChromeDriver 下載，chromedriver.exe 需手動放置於專案根目錄
 - Claude API Token 消耗量會於每次分析後印出至 console
 - 網頁查詢介面請使用 [ezMoneySniper](https://github.com/luisito851021/ezMoneySniper)

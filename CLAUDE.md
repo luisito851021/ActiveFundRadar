@@ -1,10 +1,10 @@
 # ActiveFundRadar — 專案說明
 
 ## 專案概述
-自動追蹤台灣 6 檔主動型 ETF 每日持倉變化，透過 Telegram / Discord 推送異動明細與 AI 分析摘要。
+自動追蹤台灣 8 檔主動型 ETF 每日持倉變化，透過 Telegram / Discord 推送異動明細與 AI 分析摘要。
 本機 Windows 執行排程，Web Dashboard 在另一個專案 `C:\ezMoneySniper`（Streamlit Community Cloud）。
 
-## 監控標的（6 檔）
+## 監控標的（8 檔）
 | 代號 | 名稱 | 市場/單位 | 資料來源 | 通知 |
 |------|------|-----------|----------|------|
 | 00988A | 統一全球創新 | 全球，股 | ezmoney xlsx（code=61YTW，需 Cookie） | TG+DC |
@@ -13,8 +13,13 @@
 | 00992A | 群益台灣科技創新 | 台股，張 | Selenium 爬 capitalfund.com.tw | DC only |
 | 00991A | 復華未來50 | 台股，張 | fhtrust API（HTTP，免 Cookie） | DC only |
 | 00990A | 元大全球AI | 全球，股 | Selenium 爬 yuantaetfs.com | DC only |
+| 00411A | 統一前沿科技 | 全球，股 | ezmoney xlsx（code=64YTW，需 Cookie） | TG+DC |
+| 00987D | 統一美債量化 | 美債，面額／口數 | ezmoney xlsx（code=65YTW，需 Cookie） | TG+DC |
 
 台股 1 張 = 1000 股。DC only 名單定義於 notify.py / analyze.py 的 `DISCORD_ONLY_FUNDS`。
+00987D 是唯一的債券型：持倉表分成「債券」（記面額）與「期貨(名目本金)」（記口數），
+兩者都寫進 holdings，期貨 ticker 後面接契約年月（如 `UB 2026/12`）以區分到期月份；
+顯示單位由 notify.py 的 `unit_spec()` 依 ticker 是否含「/」判斷。
 
 ## 執行環境
 - 本機：Windows，`C:\ActiveFundRadar`，Python + Windows Task Scheduler
@@ -24,7 +29,7 @@
 ## 排程（Windows Task Scheduler，2026-07 核實）
 | Task 名稱 | 時間 | 指令 |
 |-----------|------|------|
-| ActiveFundRadar | 17:00 | `python run.py 00988A 00981A 00990A` |
+| ActiveFundRadar | 17:00 | `python run.py 00988A 00981A 00990A 00411A 00987D` |
 | ActiveFundRadar_00403A | 17:00 | `python run.py 00403A` |
 | ActiveFundRadar_00992A | 19:00 | `python run.py 00992A 00991A`（群益 18:00 後才公布） |
 | ActiveFundRadar_CrossFund | 19:10 | `python cross_fund.py` |
@@ -105,7 +110,7 @@ Streamlit Cloud Secrets 額外加：`IS_CLOUD = "true"`
 
 ## 常用指令
 ```powershell
-python run.py                 # 完整流程（全部 6 檔）
+python run.py                 # 完整流程（全部 8 檔）
 python run.py 00992A 00991A   # 限定基金
 python notify.py 2026-07-03 00988A   # 單獨測試通知
 python analyze.py 2026-07-03 00981A  # 單獨測試 AI 分析

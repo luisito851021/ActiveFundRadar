@@ -132,7 +132,7 @@ def save_changes(conn, diff_df, today_date, yesterday_date, fund_id="00988A"):
 if __name__ == "__main__":
     # 用法：python diff.py DATE [FUND_IDs...]
     # 例：python diff.py 2026-04-25 00992A
-    ALL_FUNDS = ["00988A", "00981A", "00992A", "00403A", "00991A", "00990A"]
+    ALL_FUNDS = ["00988A", "00981A", "00992A", "00403A", "00991A", "00990A", "00411A", "00987D"]
 
     TODAY = sys.argv[1] if len(sys.argv) >= 2 else date.today().strftime("%Y-%m-%d")
     FUNDS = sys.argv[2:] if len(sys.argv) > 2 else ALL_FUNDS

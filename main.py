@@ -132,6 +132,84 @@ def parse_00991A_xlsx(filepath):
     return df[["fund_id", "date", "ticker", "name", "shares", "weight"]]
 
 
+def parse_00987D_xlsx(filepath):
+    """
+    解析統一 00987D（美債量化）的 xlsx。
+    與股票型 ETF 不同：持倉分成「債券」（面額）與「期貨(名目本金)」（口數）兩張表，
+    兩者都寫進 holdings——期貨名目本金佔淨值 20% 以上，是這檔量化債券 ETF 調整
+    存續期間的主要工具，只記債券會漏掉最關鍵的異動。
+    債券 shares 存面額、期貨 shares 存口數；
+    期貨 ticker 後面接契約年月（如「UB 2026/12」）以區分不同到期月份的部位。
+    """
+    df_raw = pd.read_excel(filepath, header=None, sheet_name=0)
+
+    date_str  = str(df_raw.iloc[0, 0])
+    roc_match = re.search(r"(\d{2,3})/(\d{2})/(\d{2})", date_str)
+    if roc_match:
+        data_date = date(
+            int(roc_match.group(1)) + 1911,
+            int(roc_match.group(2)),
+            int(roc_match.group(3)),
+        ).strftime("%Y-%m-%d")
+    else:
+        data_date = date.today().strftime("%Y-%m-%d")
+
+    def _header_row(keyword):
+        for i in range(len(df_raw)):
+            if keyword in df_raw.iloc[i].astype(str).tolist():
+                return i
+        return None
+
+    def _rows_after(header_idx):
+        """取 header 之後到第一個空白列為止的資料列"""
+        rows = []
+        for i in range(header_idx + 1, len(df_raw)):
+            val = df_raw.iloc[i, 0]
+            if pd.isna(val) or str(val).strip() == "":
+                break
+            rows.append(df_raw.iloc[i])
+        return rows
+
+    records = []
+
+    # 債券：債券代號 / 債券名稱 / 發行人名稱 / 面額 / 持股權重
+    bond_row = _header_row("債券代號")
+    if bond_row is not None:
+        for r in _rows_after(bond_row):
+            records.append({
+                "ticker": str(r.iloc[0]).strip(),
+                "name":   str(r.iloc[1]).strip(),
+                "shares": r.iloc[3],
+                "weight": r.iloc[4],
+            })
+
+    # 期貨：期貨代號 / 期貨名稱 / 持股權重 / 口數 / 契約年月
+    fut_row = _header_row("期貨代號")
+    if fut_row is not None:
+        for r in _rows_after(fut_row):
+            records.append({
+                "ticker": f"{str(r.iloc[0]).strip()} {str(r.iloc[4]).strip()}",
+                "name":   str(r.iloc[1]).strip(),
+                "shares": r.iloc[3],
+                "weight": r.iloc[2],
+            })
+
+    if not records:
+        raise ValueError(f"[00987D] 找不到債券或期貨持倉表：{filepath}")
+
+    df = pd.DataFrame(records)
+    df["shares"] = pd.to_numeric(
+        df["shares"].astype(str).str.replace(",", ""), errors="coerce"
+    )
+    df["weight"] = (
+        df["weight"].astype(str).str.replace("%", "").str.replace(",", "")
+        .pipe(pd.to_numeric, errors="coerce") / 100
+    )
+    df["date"]    = data_date
+    df["fund_id"] = "00987D"
+    return df[["fund_id", "date", "ticker", "name", "shares", "weight"]]
+
+
 def save_to_db(holdings_df, db_path="etf.db"):
     conn     = sqlite3.connect(db_path)
     date_val = holdings_df["date"].iloc[0]
@@ -155,7 +233,7 @@ def save_to_db(holdings_df, db_path="etf.db"):
 
 if __name__ == "__main__":
     import sys
-    target = sys.argv[1:] if len(sys.argv) > 1 else ["00988A", "00981A", "00992A", "00403A", "00991A", "00990A"]
+    target = sys.argv[1:] if len(sys.argv) > 1 else ["00988A", "00981A", "00992A", "00403A", "00991A", "00990A", "00411A", "00987D"]
 
     base_folder = r"C:\ActiveFundRadar\Files"
 
@@ -163,6 +241,7 @@ if __name__ == "__main__":
         {"folder": "00988A", "fund_id": "00988A"},
         {"folder": "00981A", "fund_id": "00981A"},
         {"folder": "00403A", "fund_id": "00403A"},
+        {"folder": "00411A", "fund_id": "00411A"},
     ]
 
     for fund in funds:
@@ -184,10 +263,10 @@ if __name__ == "__main__":
         print(holdings)
         save_to_db(holdings)
 
-        # 00988A 官網無投資區域資料，依持股代號後綴推算近似比例
-        if fund["fund_id"] == "00988A":
+        # 00988A／00411A 官網無投資區域資料，依持股代號後綴推算近似比例
+        if fund["fund_id"] in ("00988A", "00411A"):
             conn = sqlite3.connect("etf.db")
-            region_df = region.compute_region_from_holdings(conn, "00988A", holdings["date"].iloc[0])
+            region_df = region.compute_region_from_holdings(conn, fund["fund_id"], holdings["date"].iloc[0])
             conn.close()
             region.save_region(region_df)
 
@@ -223,6 +302,20 @@ if __name__ == "__main__":
             xlsx_path = sorted(files_991)[-1]
             print(f"\n[00991A] 使用檔案：{os.path.basename(xlsx_path)}")
             holdings = parse_00991A_xlsx(xlsx_path)
+            print(holdings)
+            save_to_db(holdings)
+
+
+    # 00987D 統一美債量化（債券＋期貨，獨立格式）
+    if "00987D" in target:
+        folder_987 = os.path.join(base_folder, "00987D")
+        files_987  = glob.glob(os.path.join(folder_987, "00987D_ETF_Investment_Portfolio_*.xlsx"))
+        if not files_987:
+            print("[跳過] 00987D 找不到任何 xlsx 檔案")
+        else:
+            xlsx_path = sorted(files_987)[-1]
+            print(f"\n[00987D] 使用檔案：{os.path.basename(xlsx_path)}")
+            holdings = parse_00987D_xlsx(xlsx_path)
             print(holdings)
             save_to_db(holdings)
 
