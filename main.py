@@ -35,6 +35,8 @@ def parse_etf_xlsx(filepath, fund_id="00988A"):
     holdings.columns  = holdings.iloc[0]
     holdings          = holdings.iloc[1:].reset_index(drop=True)
     holdings          = holdings.dropna(subset=["股票代號"])
+    # 用欄位名稱明確選取，不依賴欄位總數——來源偶爾會多出結尾的空白欄
+    holdings          = holdings[["股票代號", "股票名稱", "股數", "持股權重"]]
     holdings.columns  = ["ticker", "name", "shares", "weight"]
 
     holdings["shares"] = pd.to_numeric(
