@@ -127,6 +127,9 @@ def _build_report(start_str, steps, fund_stats, elapsed):
 
 ALL_FUNDS = ["00988A", "00981A", "00992A", "00403A", "00991A", "00990A", "00411A", "00987D"]
 
+# 照常下載、寫入 DB（Dashboard 與共振比對仍可用），但不發通知、不跑 AI 分析
+SILENT_FUNDS = {"00411A", "00987D"}
+
 if __name__ == "__main__":
     # 可傳入基金代號限定執行範圍，例如：python run.py 00992A
     target_funds = sys.argv[1:] if len(sys.argv) > 1 else ALL_FUNDS
@@ -193,6 +196,10 @@ if __name__ == "__main__":
         h, c = _get_counts(fund_id, latest)
         fund_stats[fund_id]["holdings"] = h
         fund_stats[fund_id]["changes"]  = c
+
+        if fund_id in SILENT_FUNDS:
+            print(f"[靜音] {fund_id} 不發送通知與 AI 分析")
+            continue
 
         ok, output = _run("notify.py", [latest, fund_id])
         steps[f"notify_{fund_id}"] = ok

@@ -13,10 +13,11 @@
 | 00992A | 群益台灣科技創新 | 台股，張 | Selenium 爬 capitalfund.com.tw | DC only |
 | 00991A | 復華未來50 | 台股，張 | fhtrust API（HTTP，免 Cookie） | DC only |
 | 00990A | 元大全球AI | 全球，股 | Selenium 爬 yuantaetfs.com | DC only |
-| 00411A | 統一前沿科技 | 全球，股 | ezmoney xlsx（code=64YTW，需 Cookie） | TG+DC |
-| 00987D | 統一美債量化 | 美債，面額／口數 | ezmoney xlsx（code=65YTW，需 Cookie） | TG+DC |
+| 00411A | 統一前沿科技 | 全球，股 | ezmoney xlsx（code=64YTW，需 Cookie） | 不發送 |
+| 00987D | 統一美債量化 | 美債，面額／口數 | ezmoney xlsx（code=65YTW，需 Cookie） | 不發送 |
 
 台股 1 張 = 1000 股。DC only 名單定義於 notify.py / analyze.py 的 `DISCORD_ONLY_FUNDS`。
+「不發送」名單定義於 run.py 的 `SILENT_FUNDS`：照常下載寫 DB（Dashboard、共振比對可用），但 run.py 不呼叫 notify/analyze。
 00987D 是唯一的債券型：持倉表分成「債券」（記面額）與「期貨(名目本金)」（記口數），
 兩者都寫進 holdings，期貨 ticker 後面接契約年月（如 `UB 2026/12`）以區分到期月份；
 顯示單位由 notify.py 的 `unit_spec()` 依 ticker 是否含「/」判斷。
